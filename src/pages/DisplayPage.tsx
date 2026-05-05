@@ -1,15 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { LedCanvas } from "@/components/LedCanvas";
-import { SponsorMarquee } from "@/components/SponsorMarquee";
+import { SponsorPlayback } from "@/components/SponsorPlayback";
 import { loadZones } from "@/zoneStorage";
 
 export function DisplayPage() {
   const { zoneId } = useParams<{ zoneId: string }>();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [fullError, setFullError] = useState<string | null>(null);
+  const [geoTick, bumpGeo] = useReducer((n: number) => n + 1, 0);
 
-  const zone = useMemo(() => loadZones().find((z) => z.id === zoneId), [zoneId]);
+  const zone = useMemo(() => loadZones().find((z) => z.id === zoneId), [zoneId, geoTick]);
+
+  useEffect(() => {
+    function onLocal() {
+      bumpGeo();
+    }
+    window.addEventListener("ledboarding-update", onLocal);
+    return () => window.removeEventListener("ledboarding-update", onLocal);
+  }, []);
 
   const goFullscreen = useCallback(async () => {
     const el = wrapRef.current;
@@ -52,11 +61,7 @@ export function DisplayPage() {
         className="flex min-h-0 flex-1 items-center justify-center bg-black"
       >
         <LedCanvas widthPx={zone.widthPx} heightPx={zone.heightPx}>
-          <SponsorMarquee zone={zone} />
-        </LedCanvas>
-      </div>
-        <LedCanvas widthPx={zone.widthPx} heightPx={zone.heightPx}>
-          <SponsorMarquee zone={zone} />
+          <SponsorPlayback zone={zone} />
         </LedCanvas>
       </div>
 

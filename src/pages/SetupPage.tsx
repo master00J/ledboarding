@@ -1,13 +1,17 @@
 import { Link } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { LedZone } from "@/types";
+import { SetupContentSection } from "@/pages/SetupContentSection";
 import { loadZones, saveZones } from "@/zoneStorage";
 
 function randomId(): string {
   return `z_${Math.random().toString(36).slice(2, 11)}`;
 }
 
+type SetupTab = "zones" | "content";
+
 export function SetupPage() {
+  const [tab, setTab] = useState<SetupTab>("zones");
   const [zones, setZones] = useState<LedZone[]>(() => loadZones());
 
   useEffect(() => {
@@ -46,23 +50,34 @@ export function SetupPage() {
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-white">LED boarding</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-          Configureer per zone de pixelmaten die overeenkomen met de ingang van je LED-controller.
-          Op het uitgangsscherm wordt exact dit canvas gerenderd (letterboxed op je monitor). Zet
-          Windows waar mogelijk op dezelfde resolutie als de controller voor scherpste output.
+          Zones: resolutie per uitgang naar je controller. Content: sponsors en playlist.
         </p>
       </header>
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={addZone}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-        >
-          Zone toevoegen
-        </button>
-      </div>
+      <nav className="mb-8 flex gap-2 border-b border-zinc-800 pb-px">
+        <TabButton active={tab === "zones"} onClick={() => setTab("zones")}>
+          Zones &amp; output
+        </TabButton>
+        <TabButton active={tab === "content"} onClick={() => setTab("content")}>
+          Sponsors &amp; playlist
+        </TabButton>
+      </nav>
 
-      <ul className="space-y-4">
+      {tab === "content" ? (
+        <SetupContentSection />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={addZone}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+            >
+              Zone toevoegen
+            </button>
+          </div>
+
+          <ul className="space-y-4">
         {sorted.map((z) => (
           <li
             key={z.id}
@@ -121,8 +136,34 @@ export function SetupPage() {
             </p>
           </li>
         ))}
-      </ul>
+          </ul>
+        </>
+      )}
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
+        active
+          ? "bg-zinc-900 text-white ring-1 ring-zinc-700 ring-b-0"
+          : "text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

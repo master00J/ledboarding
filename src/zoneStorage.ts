@@ -35,6 +35,9 @@ export function loadZones(): LedZone[] {
 
 export function saveZones(zones: LedZone[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(zones));
+  queueMicrotask(() => {
+    window.dispatchEvent(new CustomEvent("ledboarding-update"));
+  });
 }
 
 function isLedZone(x: unknown): x is LedZone {
