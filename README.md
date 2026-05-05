@@ -1,6 +1,6 @@
 # ArenaCue LED boarding
 
-Aparte webapp voor perimeter/tribune LED-output: configureerbare **pixelcanvas per zone**, sponsors met optioneel **logo**, **playlist per segment** (rust, na goal, … met fallback naar “volledige wedstrijd”), **JSON export/import**, optionele **feed** (`VITE_ARENACUE_FEED_URL`) om het actieve segment te schakelen.
+Aparte webapp voor perimeter/tribune LED-output: configureerbare **pixelcanvas per zone**, optioneel **vast LED-segment per zone**, sponsors met **logo**, **playlist per segment** (fallback naar live), **JSON export/import**, **sneltoetsen 1–9** op output, optionele **feed** (`VITE_ARENACUE_FEED_URL`) voor het globaal segment.
 
 ## Ontwikkeling
 

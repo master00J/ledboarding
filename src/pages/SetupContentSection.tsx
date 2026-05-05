@@ -126,6 +126,27 @@ export function SetupContentSection() {
     });
   }
 
+  function duplicateSegment(sourceId: string) {
+    const src = draft.segments.find((s) => s.id === sourceId);
+    if (!src) return;
+    const copy: PlaylistSegment = {
+      ...src,
+      id: rid("seg"),
+      label: `${src.label} (kopie)`,
+      playlist: src.playlist.map((p) => ({ ...p })),
+    };
+    setDraft((d) => ({ ...d, segments: [...d.segments, copy] }));
+  }
+
+  function copyPlaylistFromLive(targetSegmentId: string) {
+    if (targetSegmentId === LIVE_SEGMENT_ID) return;
+    const live = draft.segments.find((s) => s.id === LIVE_SEGMENT_ID);
+    if (!live) return;
+    patchSegment(targetSegmentId, {
+      playlist: live.playlist.map((p) => ({ ...p })),
+    });
+  }
+
   function exportJson() {
     const payload = {
       exportVersion: 2,
@@ -350,7 +371,8 @@ export function SetupContentSection() {
             <h2 className="text-lg font-semibold text-white">Segmenten</h2>
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
               Elk segment heeft een eigen playlist. Leeg = fallback naar <strong className="text-zinc-300">Volledige wedstrijd</strong>.
-              Kies het actieve segment op het output-scherm of via de optionele feed.
+              Het globaal actieve segment kies je op het output-scherm of via de feed; met een <strong className="text-zinc-300">zone-lock</strong> (tab Zones) kan een tweede uitgang een ander segment tonen.
+              Sneltoetsen <strong className="text-zinc-300">1–9</strong> schakelen het globaal segment of — bij een zone-lock — dat van die zone.
             </p>
           </div>
           <button
@@ -381,15 +403,40 @@ export function SetupContentSection() {
                   <span className="font-mono text-[10px] text-zinc-600">{seg.id}</span>
                 </div>
                 {seg.id !== LIVE_SEGMENT_ID ? (
-                  <button
-                    type="button"
-                    onClick={() => removeSegment(seg.id)}
-                    className="rounded-lg border border-red-900/60 px-3 py-2 text-xs text-red-300 hover:bg-red-950/40"
-                  >
-                    Segment verwijderen
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => duplicateSegment(seg.id)}
+                      className="rounded-lg border border-zinc-600 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                    >
+                      Dupliceren
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copyPlaylistFromLive(seg.id)}
+                      className="rounded-lg border border-zinc-600 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                    >
+                      Playlist van live
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeSegment(seg.id)}
+                      className="rounded-lg border border-red-900/60 px-3 py-2 text-xs text-red-300 hover:bg-red-950/40"
+                    >
+                      Verwijderen
+                    </button>
+                  </div>
                 ) : (
-                  <span className="text-xs text-zinc-600">Basissegment (niet te verwijderen)</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => duplicateSegment(seg.id)}
+                      className="rounded-lg border border-zinc-600 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                    >
+                      Dupliceren
+                    </button>
+                    <span className="text-xs text-zinc-600">Basissegment</span>
+                  </div>
                 )}
               </div>
 

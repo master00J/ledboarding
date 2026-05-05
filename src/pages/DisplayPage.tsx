@@ -4,7 +4,13 @@ import { LedCanvas } from "@/components/LedCanvas";
 import { SponsorPlayback } from "@/components/SponsorPlayback";
 import { loadContent, setActiveSegment } from "@/contentStorage";
 import { useArenaCueFeed } from "@/hooks/useArenaCueFeed";
-import { loadZones } from "@/zoneStorage";
+import {
+  effectiveSegmentId,
+  segmentsForShortcuts,
+} from "@/playlistResolve";
+import { loadZones, patchZoneSegment } from "@/zoneStorage";
+
+const FOLLOW_GLOBAL_VALUE = "__follow_global__";
 
 export function DisplayPage() {
   const { zoneId } = useParams<{ zoneId: string }>();
@@ -25,6 +31,23 @@ export function DisplayPage() {
     return () => window.removeEventListener("ledboarding-update", onLocal);
   }, []);
 
+  const effectiveSegId = useMemo(
+    () => (zone ? effectiveSegmentId(boardContent, zone) : ""),
+    [boardContent, zone],
+  );
+
+  const effectiveSegLabel = useMemo(() => {
+    const s = boardContent.segments.find((x) => x.id === effectiveSegId);
+    return s?.label ?? effectiveSegId;
+  }, [boardContent.segments, effectiveSegId]);
+
+  const shortcutLegend = useMemo(() => {
+    return segmentsForShortcuts(boardContent)
+      .slice(0, 9)
+      .map((s, i) => `${i + 1}=${s.label}`)
+      .join(" · ");
+  }, [boardContent]);
+
   const goFullscreen = useCallback(async () => {
     const el = wrapRef.current;
     if (!el) return;
@@ -41,12 +64,38 @@ export function DisplayPage() {
   }, []);
 
   useEffect(() => {
+    if (!zone) return;
+
     function onKey(e: KeyboardEvent) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
+
+      const digit = /^Digit(\d)$/.exec(e.code);
+      if (digit) {
+        const n = Number(digit[1]);
+        if (n >= 1 && n <= 9) {
+          const list = segmentsForShortcuts(boardContent);
+          const seg = list[n - 1];
+          if (seg) {
+            e.preventDefault();
+            if (zone.segmentId?.trim()) {
+              patchZoneSegment(zone.id, seg.id);
+            } else {
+              setActiveSegment(seg.id);
+            }
+            bumpSync();
+            return;
+          }
+        }
+      }
+
       if (e.key === "f" || e.key === "F") void goFullscreen();
     }
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goFullscreen]);
+  }, [goFullscreen, boardContent, zone, bumpSync]);
 
   if (!zone) {
     return (
@@ -58,6 +107,17 @@ export function DisplayPage() {
       </div>
     );
   }
+
+  const zoneSegmentLocked = !!zone.segmentId?.trim();
+  const lockedValid =
+    zoneSegmentLocked &&
+    boardContent.segments.some((s) => s.id === zone.segmentId!.trim());
+
+  const segmentSelectValue = zoneSegmentLocked
+    ? lockedValid
+      ? zone.segmentId!.trim()
+      : boardContent.activeSegmentId
+    : boardContent.activeSegmentId;
 
   return (
     <div className="flex min-h-screen flex-col bg-black text-white">
@@ -71,37 +131,70 @@ export function DisplayPage() {
       </div>
 
       <footer className="shrink-0 border-t border-zinc-900 bg-zinc-950 px-4 py-3 text-xs text-zinc-500">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
-          <span>
-            <strong className="text-zinc-300">{zone.name}</strong> — {zone.widthPx}×{zone.heightPx}px
-          </span>
-          <label className="flex flex-wrap items-center gap-2 text-zinc-400">
-            <span className="shrink-0">Segment</span>
-            <select
-              className="max-w-[12rem] rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:ring-2 focus:ring-emerald-600/50 sm:max-w-xs"
-              value={boardContent.activeSegmentId}
-              onChange={(e) => {
-                setActiveSegment(e.target.value);
-              }}
-            >
-              {boardContent.segments.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => void goFullscreen()}
-              className="rounded-md bg-zinc-800 px-3 py-1.5 text-zinc-200 hover:bg-zinc-700"
-            >
-              Fullscreen (F)
-            </button>
-            <Link to="/" className="rounded-md px-3 py-1.5 text-emerald-400 hover:text-emerald-300">
-              Instellingen
-            </Link>
+        <div className="mx-auto flex max-w-4xl flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              <strong className="text-zinc-300">{zone.name}</strong> — {zone.widthPx}×{zone.heightPx}px
+              <span className="ml-2 text-zinc-600">
+                · nu: <strong className="text-zinc-400">{effectiveSegLabel}</strong>
+                {zoneSegmentLocked ? (
+                  lockedValid ? (
+                    <span className="text-amber-600/90"> (vast op zone)</span>
+                  ) : (
+                    <span className="text-red-500/85"> (onbekend segment-id)</span>
+                  )
+                ) : null}
+              </span>
+            </span>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void goFullscreen()}
+                className="rounded-md bg-zinc-800 px-3 py-1.5 text-zinc-200 hover:bg-zinc-700"
+              >
+                Fullscreen (F)
+              </button>
+              <Link to="/" className="rounded-md px-3 py-1.5 text-emerald-400 hover:text-emerald-300">
+                Instellingen
+              </Link>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900/80 pt-2">
+            <label className="flex flex-wrap items-center gap-2 text-zinc-400">
+              <span className="shrink-0">{zoneSegmentLocked ? "Zone-segment" : "Globaal segment"}</span>
+              <select
+                className="max-w-[14rem] rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:ring-2 focus:ring-emerald-600/50 sm:max-w-md"
+                value={zoneSegmentLocked ? segmentSelectValue : boardContent.activeSegmentId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === FOLLOW_GLOBAL_VALUE) {
+                    patchZoneSegment(zone.id, null);
+                  } else if (zoneSegmentLocked) {
+                    patchZoneSegment(zone.id, v);
+                  } else {
+                    setActiveSegment(v);
+                  }
+                  bumpSync();
+                }}
+              >
+                {zoneSegmentLocked ? (
+                  <option value={FOLLOW_GLOBAL_VALUE}>Volg globaal segment…</option>
+                ) : null}
+                {boardContent.segments.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {shortcutLegend ? (
+              <span className="text-[10px] leading-snug text-zinc-600 sm:text-[11px]">
+                Sneltoetsen 1–9: {shortcutLegend}
+                {zoneSegmentLocked ? (
+                  <span className="ml-1 text-amber-700/90">(wijzigen zone-segment)</span>
+                ) : null}
+              </span>
+            ) : null}
           </div>
         </div>
         {fullError && <p className="mx-auto mt-2 max-w-4xl text-red-400">{fullError}</p>}

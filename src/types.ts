@@ -5,6 +5,10 @@ export type LedZone = {
   widthPx: number;
   /** Pixelhoogte zoals de LED-controller / uitgang verwacht */
   heightPx: number;
+  /**
+   * Vast segment voor deze zone (t.o.v. tribune vs veld). Null = volgt het globaal actieve segment.
+   */
+  segmentId?: string | null;
 };
 
 /** Doorlopende crawl langs alle playlist-items, of elk item als vast segment. */

@@ -40,9 +40,20 @@ export function saveZones(zones: LedZone[]): void {
   });
 }
 
+export function patchZoneSegment(zoneId: string, segmentId: string | null): void {
+  const zones = loadZones().map((z) =>
+    z.id === zoneId ? { ...z, segmentId: segmentId?.trim() || null } : z,
+  );
+  saveZones(zones);
+}
+
 function isLedZone(x: unknown): x is LedZone {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
+  const segmentOk =
+    o.segmentId === undefined ||
+    o.segmentId === null ||
+    (typeof o.segmentId === "string" && o.segmentId.length <= 128);
   return (
     typeof o.id === "string" &&
     typeof o.name === "string" &&
@@ -51,6 +62,7 @@ function isLedZone(x: unknown): x is LedZone {
     o.widthPx >= 64 &&
     o.widthPx <= 32768 &&
     o.heightPx >= 32 &&
-    o.heightPx <= 8192
+    o.heightPx <= 8192 &&
+    segmentOk
   );
 }

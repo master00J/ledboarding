@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useReducer, useState } from "react";
 import type { LedZone } from "@/types";
+import { loadContent } from "@/contentStorage";
 import { SetupContentSection } from "@/pages/SetupContentSection";
 import { loadZones, saveZones } from "@/zoneStorage";
 
@@ -13,6 +14,17 @@ type SetupTab = "zones" | "content";
 export function SetupPage() {
   const [tab, setTab] = useState<SetupTab>("zones");
   const [zones, setZones] = useState<LedZone[]>(() => loadZones());
+  const [segTick, bumpSeg] = useReducer((n: number) => n + 1, 0);
+
+  useEffect(() => {
+    function onContentChange() {
+      bumpSeg();
+    }
+    window.addEventListener("ledboarding-update", onContentChange);
+    return () => window.removeEventListener("ledboarding-update", onContentChange);
+  }, []);
+
+  const boardSegments = useMemo(() => loadContent().segments, [segTick]);
 
   useEffect(() => {
     saveZones(zones);
@@ -131,6 +143,28 @@ export function SetupPage() {
                 </button>
               </div>
             </div>
+            <label className="mt-3 block max-w-xl">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                LED-segment (zone)
+              </span>
+              <select
+                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50"
+                value={z.segmentId ?? ""}
+                onChange={(e) =>
+                  update(z.id, { segmentId: e.target.value === "" ? null : e.target.value })
+                }
+              >
+                <option value="">Volgt globaal actief segment (aanbevolen)</option>
+                {boardSegments.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label} ({s.id})
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-[11px] text-zinc-600">
+                Handig voor tweede output (tribune vs veld): vaste playlist onafhankelijk van het globaal gekozen segment.
+              </span>
+            </label>
             <p className="mt-3 font-mono text-xs text-zinc-500">
               {z.widthPx} × {z.heightPx} px
             </p>
@@ -168,10 +202,15 @@ function TabButton({
 }
 
 function clampZone(z: LedZone): LedZone {
+  const segmentId =
+    z.segmentId === undefined || z.segmentId === null || String(z.segmentId).trim() === ""
+      ? null
+      : String(z.segmentId).trim().slice(0, 128);
   return {
     ...z,
     widthPx: Math.min(32768, Math.max(64, Math.round(z.widthPx))),
     heightPx: Math.min(8192, Math.max(32, Math.round(z.heightPx))),
     name: z.name.trim() || "Zone",
+    segmentId,
   };
 }

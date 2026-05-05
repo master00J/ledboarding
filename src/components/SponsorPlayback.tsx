@@ -22,8 +22,8 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
   }, []);
 
   const content = useMemo(() => loadContent(), [tick]);
-  const entries = useMemo(() => resolveActivePlaylist(content), [content]);
-  const playback = useMemo(() => effectivePlayback(content), [content]);
+  const entries = useMemo(() => resolveActivePlaylist(content, zone), [content, zone]);
+  const playback = useMemo(() => effectivePlayback(content, zone), [content, zone]);
 
   if (entries.length === 0) {
     return <FallbackCanvas zone={zone} message="Geen playlist — voeg sponsors toe in instellingen." />;
