@@ -20,7 +20,9 @@ npm run electron:dev     # Vite production-build + Electron-venster (zelfde flow
 npm run build
 ```
 
-Levert in **`installer-dist/`** o.a. portable **`ArenaCue-Ledboarding.exe`** en een **NSIS-setup**. Signing staat uit (`forceCodeSigning: false`), net als bij het scoreboard.
+Levert in **`dist/`** (zelfde als Stadium Scoreboard) o.a. portable **`ArenaCue-Ledboarding.exe`** en een **NSIS-setup**. Signing staat uit (`forceCodeSigning: false`).
+
+**Icoon (zelfde bron als scoreboard):** vóór elke build draait `scripts/ensure-windows-icon.mjs` — zoekt een PNG (`ledboarding/public/arenacue-icon.png`, of `../Website/public/assets/arenacue-icon.png`, of `../public/app-icon.png`) en schrijft `build/icon.ico`; zo niet, kopieert het `../build/icon.ico` van een scoreboard-build.
 
 ### Alleen statische webbuild (geen Electron)
 

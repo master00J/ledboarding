@@ -1,7 +1,7 @@
 node_modules
 renderer-dist
 electron-dist
-installer-dist
+build
 dist
 .DS_Store
 *.local

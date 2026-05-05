@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 
 const IS_DEV = !app.isPackaged;
@@ -11,6 +12,16 @@ function rendererIndex(): string {
   return path.join(appRoot(), "renderer-dist", "index.html");
 }
 
+function windowIconPath(): string | undefined {
+  const p = path.join(appRoot(), "build", "icon.ico");
+  try {
+    if (fs.existsSync(p)) return p;
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
@@ -18,6 +29,7 @@ function createWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 480,
     title: "ArenaCue LED boarding",
+    icon: windowIconPath(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

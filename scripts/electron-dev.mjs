@@ -22,6 +22,7 @@ function run(command: string, args: string[]) {
 }
 
 async function main() {
+  await run("node", ["scripts/ensure-windows-icon.mjs"]);
   await run("npm", ["run", "renderer:build"]);
   await run("npm", ["run", "electron:compile"]);
   await run("npx", ["electron", "."]);
