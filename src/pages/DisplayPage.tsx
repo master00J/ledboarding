@@ -2,19 +2,24 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Link, useParams } from "react-router-dom";
 import { LedCanvas } from "@/components/LedCanvas";
 import { SponsorPlayback } from "@/components/SponsorPlayback";
+import { loadContent, setActiveSegment } from "@/contentStorage";
+import { useArenaCueFeed } from "@/hooks/useArenaCueFeed";
 import { loadZones } from "@/zoneStorage";
 
 export function DisplayPage() {
   const { zoneId } = useParams<{ zoneId: string }>();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [fullError, setFullError] = useState<string | null>(null);
-  const [geoTick, bumpGeo] = useReducer((n: number) => n + 1, 0);
+  const [syncTick, bumpSync] = useReducer((n: number) => n + 1, 0);
 
-  const zone = useMemo(() => loadZones().find((z) => z.id === zoneId), [zoneId, geoTick]);
+  const zone = useMemo(() => loadZones().find((z) => z.id === zoneId), [zoneId, syncTick]);
+  const boardContent = useMemo(() => loadContent(), [syncTick]);
+
+  useArenaCueFeed(boardContent.settings.feedFollowSegment === true);
 
   useEffect(() => {
     function onLocal() {
-      bumpGeo();
+      bumpSync();
     }
     window.addEventListener("ledboarding-update", onLocal);
     return () => window.removeEventListener("ledboarding-update", onLocal);
@@ -66,10 +71,26 @@ export function DisplayPage() {
       </div>
 
       <footer className="shrink-0 border-t border-zinc-900 bg-zinc-950 px-4 py-3 text-xs text-zinc-500">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
           <span>
             <strong className="text-zinc-300">{zone.name}</strong> — {zone.widthPx}×{zone.heightPx}px
           </span>
+          <label className="flex flex-wrap items-center gap-2 text-zinc-400">
+            <span className="shrink-0">Segment</span>
+            <select
+              className="max-w-[12rem] rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:ring-2 focus:ring-emerald-600/50 sm:max-w-xs"
+              value={boardContent.activeSegmentId}
+              onChange={(e) => {
+                setActiveSegment(e.target.value);
+              }}
+            >
+              {boardContent.segments.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="flex flex-wrap gap-3">
             <button
               type="button"

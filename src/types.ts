@@ -14,6 +14,10 @@ export type ContentSettings = {
   playbackMode: PlaybackMode;
   /** Scroll-modus: tijd voor één volledige passage over alle playlist-items (één “ronde”). */
   scrollLoopDurationSec: number;
+  /**
+   * Als true: poll `VITE_ARENACUE_FEED_URL` en pas het actieve LED-segment toe wanneer de feed een ander segment-id meldt.
+   */
+  feedFollowSegment?: boolean;
 };
 
 export type Sponsor = {
@@ -24,6 +28,8 @@ export type Sponsor = {
   bgColor: string | null;
   /** Tekstkleur (#rrggbb) of leeg voor wit */
   textColor: string | null;
+  /** Optioneel logo (meestal data-URL van geüploade afbeelding) */
+  logoDataUrl: string | null;
 };
 
 export type PlaylistEntry = {
@@ -32,10 +38,25 @@ export type PlaylistEntry = {
   durationSec: number;
 };
 
+/** Vaste ids; `live` mag niet verwijderd worden. */
+export const LIVE_SEGMENT_ID = "live";
+
+export type PlaylistSegment = {
+  id: string;
+  label: string;
+  playlist: PlaylistEntry[];
+  /** Zo niet aangevinkt: gebruik `playbackMode` + `scrollLoopDurationSec` van dit segment i.p.v. globaal. */
+  useGlobalSettings: boolean;
+  playbackMode: PlaybackMode;
+  scrollLoopDurationSec: number;
+};
+
 export type LedContentState = {
   settings: ContentSettings;
   sponsors: Sponsor[];
-  playlist: PlaylistEntry[];
+  segments: PlaylistSegment[];
+  /** Welke segment-playlist nu op het uitgangsscherm hoort (incl. fallback naar live). */
+  activeSegmentId: string;
 };
 
 export type ResolvedPlaylistEntry = {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { LedZone, ResolvedPlaylistEntry } from "@/types";
+import type { LedZone, ResolvedPlaylistEntry, Sponsor } from "@/types";
 import { loadContent } from "@/contentStorage";
-import { resolvePlaylist } from "@/playlistResolve";
+import { effectivePlayback, resolveActivePlaylist } from "@/playlistResolve";
 
 export function SponsorPlayback({ zone }: { zone: LedZone }) {
   const [tick, bump] = useReducer((n: number) => n + 1, 0);
@@ -22,13 +22,14 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
   }, []);
 
   const content = useMemo(() => loadContent(), [tick]);
-  const entries = useMemo(() => resolvePlaylist(content), [content]);
+  const entries = useMemo(() => resolveActivePlaylist(content), [content]);
+  const playback = useMemo(() => effectivePlayback(content), [content]);
 
   if (entries.length === 0) {
     return <FallbackCanvas zone={zone} message="Geen playlist — voeg sponsors toe in instellingen." />;
   }
 
-  if (content.settings.playbackMode === "hold") {
+  if (playback.mode === "hold") {
     return <HoldCarousel zone={zone} entries={entries} />;
   }
 
@@ -36,7 +37,7 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
     <ScrollMarquee
       zone={zone}
       entries={entries}
-      loopDurationSec={content.settings.scrollLoopDurationSec}
+      loopDurationSec={playback.scrollLoopDurationSec}
     />
   );
 }
@@ -50,6 +51,29 @@ function FallbackCanvas({ zone, message }: { zone: LedZone; message: string }) {
     >
       {message}
     </div>
+  );
+}
+
+function SponsorChipRow({ sponsor, fontSize }: { sponsor: Sponsor; fontSize: number }) {
+  const imgH = Math.round(fontSize * 1.35);
+  const bg = sponsor.bgColor ?? "#18181b";
+  const fg = sponsor.textColor ?? "#fafafa";
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-3 rounded-md px-4 py-2 font-semibold tracking-wide"
+      style={{ fontSize, backgroundColor: bg, color: fg }}
+    >
+      {sponsor.logoDataUrl ? (
+        <img
+          src={sponsor.logoDataUrl}
+          alt=""
+          className="shrink-0 object-contain"
+          style={{ height: imgH, maxWidth: imgH * 2.5 }}
+          draggable={false}
+        />
+      ) : null}
+      <span>{sponsor.label}</span>
+    </span>
   );
 }
 
@@ -67,20 +91,13 @@ function ScrollMarquee({
   const dur = Math.max(12, Number.isFinite(loopDurationSec) ? loopDurationSec : 42);
 
   const half = (suffix: string) =>
-    entries.map((e, i) => {
-      const { sponsor } = e;
-      const bg = sponsor.bgColor ?? "#18181b";
-      const fg = sponsor.textColor ?? "#fafafa";
-      return (
-        <span
-          key={`${suffix}-${sponsor.id}-${i}`}
-          className="inline-flex shrink-0 items-center rounded-md px-4 py-2 font-semibold tracking-wide"
-          style={{ fontSize, backgroundColor: bg, color: fg }}
-        >
-          {sponsor.label}
-        </span>
-      );
-    });
+    entries.map((e, i) => (
+      <SponsorChipRow
+        key={`${suffix}-${e.sponsor.id}-${i}`}
+        sponsor={e.sponsor}
+        fontSize={fontSize}
+      />
+    ));
 
   return (
     <div
@@ -145,18 +162,27 @@ function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlayl
   }, [sig]);
 
   const safeIdx = index % entries.length;
-  const current = entries[safeIdx]!;
-  const sponsor = current.sponsor;
+  const sponsor = entries[safeIdx]!.sponsor;
   const fontSize = Math.max(18, Math.round(zone.heightPx * 0.34));
+  const logoMax = Math.round(zone.heightPx * 0.42);
   const bg = sponsor.bgColor ?? "#0f172a";
   const fg = sponsor.textColor ?? "#f8fafc";
 
   return (
     <div
       key={`${sig}-${safeIdx}`}
-      className="flex h-full w-full flex-col items-center justify-center px-6 text-center sponsor-hold-pop"
+      className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center sponsor-hold-pop"
       style={{ backgroundColor: bg, color: fg }}
     >
+      {sponsor.logoDataUrl ? (
+        <img
+          src={sponsor.logoDataUrl}
+          alt=""
+          className="object-contain"
+          style={{ maxHeight: logoMax, maxWidth: Math.min(zone.widthPx * 0.85, logoMax * 3) }}
+          draggable={false}
+        />
+      ) : null}
       <div className="font-black uppercase leading-tight tracking-tight" style={{ fontSize }}>
         {sponsor.label}
       </div>
