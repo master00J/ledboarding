@@ -7,13 +7,30 @@ Aparte webapp voor perimeter/tribune LED-output: configureerbare **pixelcanvas p
 ```bash
 cd ledboarding
 npm install
-npm run dev
+npm run dev              # alleen Vite (browser)
+npm run electron:dev     # Vite production-build + Electron-venster (zelfde flow als scoreboard-dev)
 ```
 
-- **Instellingen:** [http://localhost:5173/](http://localhost:5173/)
-- **Output:** open “Output openen” bij een zone, of `/display/<zone-id>` — **F** voor fullscreen (alleen het canvas-gebied).
+- **Instellingen:** `http://localhost:5173/#/` (of in Electron na `electron:dev`: hash-routes)
+- **Output:** `#/display/<zone-id>` — **F** voor fullscreen op het canvas.
 
-Config wordt lokaal bewaard (`localStorage`). Productie-build: `npm run build` → map `dist/` (statisch hosten of kiosk-browser).
+### Installer (Windows, zelfde patroon als Stadium Scoreboard)
+
+```bash
+npm run build
+```
+
+Levert in **`installer-dist/`** o.a. portable **`ArenaCue-Ledboarding.exe`** en een **NSIS-setup**. Signing staat uit (`forceCodeSigning: false`), net als bij het scoreboard.
+
+### Alleen statische webbuild (geen Electron)
+
+```bash
+npm run renderer:build
+```
+
+Output staat in **`renderer-dist/`** (relatieve paden, geschikt voor `file://` of hosting).
+
+Config blijft lokaal (`localStorage`).
 
 ## Repo
 

@@ -1,4 +1,7 @@
 node_modules
+renderer-dist
+electron-dist
+installer-dist
 dist
 .DS_Store
 *.local

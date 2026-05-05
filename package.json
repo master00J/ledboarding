@@ -3,9 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run electron:build",
+    "renderer:build": "tsc --noEmit && vite build",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "node scripts/electron-dev.mjs",
+    "electron:build": "node scripts/pre-electron-build.mjs && npm run renderer:build && npm run electron:compile && electron-builder",
+    "electron:pack": "npm run renderer:build && npm run electron:compile && electron-builder --dir",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,11 +21,50 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.6",
+    "@types/node": "^22.9.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.5.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "tailwindcss": "^4.1.6",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
+  },
+  "build": {
+    "forceCodeSigning": false,
+    "appId": "com.soundvision.ledboarding",
+    "productName": "ArenaCue LED boarding",
+    "copyright": "Sound & Vision — ArenaCue LED boarding",
+    "directories": {
+      "output": "installer-dist"
+    },
+    "portable": {
+      "artifactName": "ArenaCue-Ledboarding.${ext}"
+    },
+    "win": {
+      "sign": null,
+      "signAndEditExecutable": false,
+      "signDlls": false,
+      "verifyUpdateCodeSignature": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": ["nl-NL", "en-US"],
+      "language": "1043"
+    },
+    "asar": false,
+    "files": ["electron-dist/**/*", "renderer-dist/**/*", "package.json"]
   }
 }
