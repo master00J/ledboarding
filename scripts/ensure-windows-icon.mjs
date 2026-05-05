@@ -17,7 +17,7 @@ const toIco = require("to-ico");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 
-function copyParentIco(): boolean {
+function copyParentIco() {
   const parentIco = path.join(root, "..", "build", "icon.ico");
   const outIco = path.join(root, "build", "icon.ico");
   if (!fs.existsSync(parentIco)) return false;
@@ -27,10 +27,9 @@ function copyParentIco(): boolean {
   return true;
 }
 
-function pickSourcePng(): string | null {
+function pickSourcePng() {
   const candidates = [
     path.join(root, "public", "arenacue-icon.png"),
-    path.join(root, "public", "app-icon.png"),
     path.join(root, "..", "Website", "public", "assets", "arenacue-icon.png"),
     path.join(root, "..", "public", "app-icon.png"),
   ];
@@ -40,23 +39,23 @@ function pickSourcePng(): string | null {
   return null;
 }
 
-async function generateFromPng(src: string) {
+async function generateFromPng(src) {
   const outIco = path.join(root, "build", "icon.ico");
   const outPng = path.join(root, "public", "app-icon.png");
   const outDir = path.join(root, "build");
 
-  const sizes = [256, 128, 64, 48, 32, 16];
-  const buffers = [];
-  for (const s of sizes) {
-    const buf = await sharp(src)
-      .resize(s, s, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png()
-      .toBuffer();
-    buffers.push(buf);
-  }
+  /** Eén 256×256; to-ico vult standaardmaten (zelfde idee als scoreboard). */
+  const buf256 = await sharp(src)
+    .resize(256, 256, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .ensureAlpha()
+    .png()
+    .toBuffer();
 
   fs.mkdirSync(outDir, { recursive: true });
-  const ico = await toIco(buffers);
+  const ico = await toIco([buf256], {
+    resize: true,
+    sizes: [16, 24, 32, 48, 64, 128, 256],
+  });
   fs.writeFileSync(outIco, ico);
 
   fs.mkdirSync(path.join(root, "public"), { recursive: true });

@@ -10,11 +10,12 @@ export function useArenaCueFeed(enabled: boolean, pollMs = 5000): void {
 
   useEffect(() => {
     if (!enabled || !url) return;
+    const feedUrl = url;
     let cancelled = false;
 
     async function tick() {
       try {
-        const res = await fetch(url, { cache: "no-store" });
+        const res = await fetch(feedUrl, { cache: "no-store" });
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as { segmentId?: string };
         const id = typeof data.segmentId === "string" ? data.segmentId.trim() : "";

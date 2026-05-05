@@ -65,6 +65,7 @@ export function DisplayPage() {
 
   useEffect(() => {
     if (!zone) return;
+    const z = zone;
 
     function onKey(e: KeyboardEvent) {
       if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -79,8 +80,8 @@ export function DisplayPage() {
           const seg = list[n - 1];
           if (seg) {
             e.preventDefault();
-            if (zone.segmentId?.trim()) {
-              patchZoneSegment(zone.id, seg.id);
+            if (z.segmentId?.trim()) {
+              patchZoneSegment(z.id, seg.id);
             } else {
               setActiveSegment(seg.id);
             }
