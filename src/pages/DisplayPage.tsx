@@ -127,7 +127,36 @@ export function DisplayPage() {
         className="flex min-h-0 flex-1 items-center justify-center bg-black"
       >
         <LedCanvas widthPx={zone.widthPx} heightPx={zone.heightPx}>
-          <SponsorPlayback zone={zone} />
+          {zone.regions && zone.regions.length > 0 ? (
+            <div className="relative h-full w-full bg-black">
+              {zone.regions.map((region) => (
+                <div
+                  key={region.id}
+                  className="absolute overflow-hidden bg-black ring-1 ring-white/10"
+                  style={{
+                    left: region.xPx,
+                    top: region.yPx,
+                    width: region.widthPx,
+                    height: region.heightPx,
+                  }}
+                  title={`${region.name} · ${region.widthPx}×${region.heightPx}`}
+                >
+                  <SponsorPlayback
+                    zone={{
+                      id: `${zone.id}:${region.id}`,
+                      name: region.name,
+                      widthPx: region.widthPx,
+                      heightPx: region.heightPx,
+                      segmentId: region.segmentId ?? zone.segmentId ?? null,
+                      regions: [],
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <SponsorPlayback zone={zone} />
+          )}
         </LedCanvas>
       </div>
 

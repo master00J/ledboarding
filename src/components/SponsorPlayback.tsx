@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { LedZone, ResolvedPlaylistEntry, Sponsor } from "@/types";
 import { loadContent } from "@/contentStorage";
+import { mediaSourceUrl } from "@/mediaSource";
 import { effectivePlayback, resolveActivePlaylist } from "@/playlistResolve";
 
 export function SponsorPlayback({ zone }: { zone: LedZone }) {
@@ -58,12 +59,31 @@ function SponsorChipRow({ sponsor, fontSize }: { sponsor: Sponsor; fontSize: num
   const imgH = Math.round(fontSize * 1.35);
   const bg = sponsor.bgColor ?? "#18181b";
   const fg = sponsor.textColor ?? "#fafafa";
+  const mediaSrc = mediaSourceUrl(sponsor.mediaSrc);
   return (
     <span
       className="inline-flex shrink-0 items-center gap-3 rounded-md px-4 py-2 font-semibold tracking-wide"
       style={{ fontSize, backgroundColor: bg, color: fg }}
     >
-      {sponsor.logoDataUrl ? (
+      {sponsor.contentKind === "image" && mediaSrc ? (
+        <img
+          src={mediaSrc}
+          alt=""
+          className="shrink-0 object-contain"
+          style={{ height: imgH, maxWidth: imgH * 3.2 }}
+          draggable={false}
+        />
+      ) : sponsor.contentKind === "video" && mediaSrc ? (
+        <video
+          src={mediaSrc}
+          muted
+          autoPlay
+          loop
+          playsInline
+          className="shrink-0 object-contain"
+          style={{ height: imgH, maxWidth: imgH * 3.2 }}
+        />
+      ) : sponsor.logoDataUrl ? (
         <img
           src={sponsor.logoDataUrl}
           alt=""
@@ -167,6 +187,40 @@ function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlayl
   const logoMax = Math.round(zone.heightPx * 0.42);
   const bg = sponsor.bgColor ?? "#0f172a";
   const fg = sponsor.textColor ?? "#f8fafc";
+  const mediaSrc = mediaSourceUrl(sponsor.mediaSrc);
+  const objectFit = sponsor.mediaFit === "cover" ? "cover" : "contain";
+
+  if (sponsor.contentKind === "image" && mediaSrc) {
+    return (
+      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black sponsor-hold-pop">
+        <img
+          src={mediaSrc}
+          alt=""
+          className="h-full w-full"
+          style={{ objectFit }}
+          draggable={false}
+        />
+        <SponsorOverlayLabel sponsor={sponsor} />
+      </div>
+    );
+  }
+
+  if (sponsor.contentKind === "video" && mediaSrc) {
+    return (
+      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black sponsor-hold-pop">
+        <video
+          src={mediaSrc}
+          className="h-full w-full"
+          style={{ objectFit }}
+          muted
+          autoPlay
+          loop
+          playsInline
+        />
+        <SponsorOverlayLabel sponsor={sponsor} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -195,6 +249,16 @@ function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlayl
           animation: sponsor-hold-pop 0.5s ease-out;
         }
       `}</style>
+    </div>
+  );
+}
+
+function SponsorOverlayLabel({ sponsor }: { sponsor: Sponsor }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-2">
+      <div className="truncate text-center text-sm font-semibold uppercase tracking-wide text-white/90">
+        {sponsor.label}
+      </div>
     </div>
   );
 }

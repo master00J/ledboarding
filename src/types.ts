@@ -1,3 +1,15 @@
+export type LedRegion = {
+  id: string;
+  name: string;
+  /** Linkerbovenhoek binnen de zone, in pixels. */
+  xPx: number;
+  yPx: number;
+  widthPx: number;
+  heightPx: number;
+  /** Vast segment voor deze subzone. Null = volgt zone/globaal. */
+  segmentId?: string | null;
+};
+
 export type LedZone = {
   id: string;
   name: string;
@@ -9,10 +21,16 @@ export type LedZone = {
    * Vast segment voor deze zone (t.o.v. tribune vs veld). Null = volgt het globaal actieve segment.
    */
   segmentId?: string | null;
+  /** Optionele vaste plekken binnen dit output-canvas. Leeg = volledige zone toont één playlist. */
+  regions?: LedRegion[];
 };
 
 /** Doorlopende crawl langs alle playlist-items, of elk item als vast segment. */
 export type PlaybackMode = "scroll" | "hold";
+
+export type SponsorContentKind = "text" | "image" | "video";
+
+export type MediaFit = "contain" | "cover";
 
 export type ContentSettings = {
   playbackMode: PlaybackMode;
@@ -34,6 +52,14 @@ export type Sponsor = {
   textColor: string | null;
   /** Optioneel logo (meestal data-URL van geüploade afbeelding) */
   logoDataUrl: string | null;
+  /** Wat dit item op de LED boarding toont. Oudere exports zonder waarde blijven tekst/logo. */
+  contentKind: SponsorContentKind;
+  /** Data-URL of lokaal bestandspad voor image/video content. */
+  mediaSrc: string | null;
+  /** Leesbare bestandsnaam voor beheer in het control panel. */
+  mediaTitle: string | null;
+  /** Hoe image/video in het LED-canvas past. */
+  mediaFit: MediaFit;
 };
 
 export type PlaylistEntry = {

@@ -7,6 +7,7 @@ import {
   saveContent,
 } from "@/contentStorage";
 import { PlaylistRowsEditor } from "@/components/PlaylistRowsEditor";
+import { contentKindFromPath, mediaTitleFromPath } from "@/mediaSource";
 
 function rid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 11)}`;
@@ -14,7 +15,11 @@ function rid(prefix: string): string {
 
 const MAX_LOGO_CHARS = 720_000;
 
-export function SetupContentSection() {
+export function SetupContentSection({
+  view = "all",
+}: {
+  view?: "all" | "content" | "playlists" | "backup";
+}) {
   const [draft, setDraft] = useState<LedContentState>(() => loadContent());
   const [logoErr, setLogoErr] = useState<string | null>(null);
   const feedUrlConfigured = Boolean(import.meta.env.VITE_ARENACUE_FEED_URL?.trim());
@@ -55,6 +60,10 @@ export function SetupContentSection() {
       bgColor: "#27272a",
       textColor: "#fafafa",
       logoDataUrl: null,
+      contentKind: "text",
+      mediaSrc: null,
+      mediaTitle: null,
+      mediaFit: "contain",
     };
     setDraft((d) => ({
       ...d,
@@ -102,6 +111,45 @@ export function SetupContentSection() {
 
   function clearLogo(sponsorId: string) {
     updateSponsor(sponsorId, { logoDataUrl: null });
+  }
+
+  async function pickLocalMedia(sponsorId: string) {
+    const paths = await window.ledboarding?.selectMediaFiles();
+    const first = paths?.[0];
+    if (!first) return;
+    updateSponsor(sponsorId, {
+      contentKind: contentKindFromPath(first),
+      mediaSrc: first,
+      mediaTitle: mediaTitleFromPath(first),
+    });
+  }
+
+  function readMediaFile(sponsorId: string, file: File | null) {
+    setLogoErr(null);
+    if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/"))) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = typeof reader.result === "string" ? reader.result : "";
+      if (url.length > 1_500_000) {
+        setLogoErr("Media te groot voor browser-opslag. Gebruik de desktop-app en kies het lokale bestand.");
+        return;
+      }
+      updateSponsor(sponsorId, {
+        contentKind: file.type.startsWith("video/") ? "video" : "image",
+        mediaSrc: url,
+        mediaTitle: file.name,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearSponsorMedia(sponsorId: string) {
+    updateSponsor(sponsorId, {
+      contentKind: "text",
+      mediaSrc: null,
+      mediaTitle: null,
+      mediaFit: "contain",
+    });
   }
 
   function addSegment() {
@@ -179,6 +227,7 @@ export function SetupContentSection() {
 
   return (
     <div className="space-y-10">
+      {(view === "all" || view === "backup") && (
       <section className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
         <div>
           <h2 className="text-sm font-semibold text-white">Backup</h2>
@@ -208,6 +257,7 @@ export function SetupContentSection() {
           </label>
         </div>
       </section>
+      )}
 
       {logoErr && (
         <p className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-2 text-sm text-amber-200">
@@ -215,6 +265,7 @@ export function SetupContentSection() {
         </p>
       )}
 
+      {(view === "all" || view === "playlists") && (
       <section>
         <h2 className="text-lg font-semibold text-white">Globale weergave</h2>
         <p className="mt-1 max-w-2xl text-sm text-zinc-400">
@@ -280,7 +331,9 @@ export function SetupContentSection() {
           </span>
         </label>
       </section>
+      )}
 
+      {(view === "all" || view === "content") && (
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-white">Sponsors</h2>
@@ -351,6 +404,74 @@ export function SetupContentSection() {
                       ) : null}
                     </div>
                   </div>
+                  <div className="min-w-[260px] flex-1 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        LED content
+                      </span>
+                      <select
+                        className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        value={s.contentKind}
+                        onChange={(e) =>
+                          updateSponsor(s.id, {
+                            contentKind: e.target.value === "video" ? "video" : e.target.value === "image" ? "image" : "text",
+                          })
+                        }
+                      >
+                        <option value="text">Tekst/logo</option>
+                        <option value="image">Afbeelding</option>
+                        <option value="video">Video</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {window.ledboarding ? (
+                        <button
+                          type="button"
+                          onClick={() => void pickLocalMedia(s.id)}
+                          className="rounded-lg border border-zinc-600 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800"
+                        >
+                          Media kiezen…
+                        </button>
+                      ) : (
+                        <label className="cursor-pointer rounded-lg border border-zinc-600 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800">
+                          Media uploaden
+                          <input
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              readMediaFile(s.id, e.target.files?.[0] ?? null);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      )}
+                      <select
+                        className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500/50"
+                        value={s.mediaFit}
+                        onChange={(e) =>
+                          updateSponsor(s.id, { mediaFit: e.target.value === "cover" ? "cover" : "contain" })
+                        }
+                      >
+                        <option value="contain">Volledig tonen</option>
+                        <option value="cover">Vullen/croppen</option>
+                      </select>
+                      {s.mediaSrc ? (
+                        <button
+                          type="button"
+                          onClick={() => clearSponsorMedia(s.id)}
+                          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                        >
+                          Media wissen
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 truncate text-[11px] text-zinc-500">
+                      {s.mediaSrc
+                        ? `${s.contentKind === "video" ? "Video" : "Afbeelding"}: ${s.mediaTitle ?? s.mediaSrc}`
+                        : "Geen media gekoppeld; dit item toont tekst/logo."}
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => removeSponsor(s.id)}
@@ -364,7 +485,9 @@ export function SetupContentSection() {
           </ul>
         )}
       </section>
+      )}
 
+      {(view === "all" || view === "playlists") && (
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -507,6 +630,7 @@ export function SetupContentSection() {
           ))}
         </ul>
       </section>
+      )}
     </div>
   );
 }
@@ -522,5 +646,9 @@ function normalizeSponsorPatch(s: Sponsor): Sponsor {
     bgColor: /^#[0-9a-fA-F]{6}$/.test(s.bgColor ?? "") ? (s.bgColor as string).toLowerCase() : null,
     textColor: /^#[0-9a-fA-F]{6}$/.test(s.textColor ?? "") ? (s.textColor as string).toLowerCase() : null,
     logoDataUrl,
+    contentKind: s.mediaSrc ? s.contentKind : "text",
+    mediaSrc: s.mediaSrc?.trim() || null,
+    mediaTitle: s.mediaTitle?.trim() || null,
+    mediaFit: s.mediaFit === "cover" ? "cover" : "contain",
   };
 }

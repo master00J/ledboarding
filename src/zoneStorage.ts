@@ -1,4 +1,4 @@
-import type { LedZone } from "@/types";
+import type { LedRegion, LedZone } from "@/types";
 
 const STORAGE_KEY = "ledboarding.zones.v1";
 
@@ -13,6 +13,7 @@ export function defaultZones(): LedZone[] {
       name: "Veld perimeter",
       widthPx: 4992,
       heightPx: 320,
+      regions: [],
     },
   ];
 }
@@ -27,7 +28,8 @@ export function loadZones(): LedZone[] {
     }
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed) || parsed.length === 0) return defaultZones();
-    return parsed.filter(isLedZone);
+    const zones = parsed.map(normalizeZone).filter(Boolean) as LedZone[];
+    return zones.length > 0 ? zones : defaultZones();
   } catch {
     return defaultZones();
   }
@@ -47,14 +49,14 @@ export function patchZoneSegment(zoneId: string, segmentId: string | null): void
   saveZones(zones);
 }
 
-function isLedZone(x: unknown): x is LedZone {
-  if (!x || typeof x !== "object") return false;
+function normalizeZone(x: unknown): LedZone | null {
+  if (!x || typeof x !== "object") return null;
   const o = x as Record<string, unknown>;
   const segmentOk =
     o.segmentId === undefined ||
     o.segmentId === null ||
     (typeof o.segmentId === "string" && o.segmentId.length <= 128);
-  return (
+  const valid =
     typeof o.id === "string" &&
     typeof o.name === "string" &&
     typeof o.widthPx === "number" &&
@@ -63,6 +65,49 @@ function isLedZone(x: unknown): x is LedZone {
     o.widthPx <= 32768 &&
     o.heightPx >= 32 &&
     o.heightPx <= 8192 &&
-    segmentOk
-  );
+    segmentOk;
+  if (!valid) return null;
+  const id = o.id as string;
+  const name = o.name as string;
+  const widthPx = Math.round(o.widthPx as number);
+  const heightPx = Math.round(o.heightPx as number);
+  const regionsRaw = Array.isArray(o.regions) ? o.regions : [];
+  const regions = regionsRaw
+    .map((r) => normalizeRegion(r, widthPx, heightPx))
+    .filter(Boolean) as LedRegion[];
+  return {
+    id,
+    name: name.trim() || "Zone",
+    widthPx,
+    heightPx,
+    segmentId:
+      typeof o.segmentId === "string" && o.segmentId.trim().length > 0 ? o.segmentId.trim() : null,
+    regions,
+  };
+}
+
+function normalizeRegion(x: unknown, zoneW: number, zoneH: number): LedRegion | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  if (typeof o.id !== "string" || typeof o.name !== "string") return null;
+  const widthPx = clampNumber(o.widthPx, 1, zoneW, Math.max(1, Math.round(zoneW / 3)));
+  const heightPx = clampNumber(o.heightPx, 1, zoneH, zoneH);
+  const xPx = clampNumber(o.xPx, 0, Math.max(0, zoneW - widthPx), 0);
+  const yPx = clampNumber(o.yPx, 0, Math.max(0, zoneH - heightPx), 0);
+  return {
+    id: o.id,
+    name: o.name.trim() || "Subzone",
+    xPx,
+    yPx,
+    widthPx,
+    heightPx,
+    segmentId:
+      typeof o.segmentId === "string" && o.segmentId.trim().length > 0 ? o.segmentId.trim() : null,
+  };
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
 }

@@ -1,9 +1,11 @@
 import type {
   LedContentState,
+  MediaFit,
   PlaybackMode,
   PlaylistEntry,
   PlaylistSegment,
   Sponsor,
+  SponsorContentKind,
 } from "@/types";
 import { LIVE_SEGMENT_ID } from "@/types";
 
@@ -49,6 +51,10 @@ export function defaultContent(): LedContentState {
     bgColor: "#064e3b",
     textColor: "#ecfdf5",
     logoDataUrl: null,
+    contentKind: "text",
+    mediaSrc: null,
+    mediaTitle: null,
+    mediaFit: "contain",
   };
   const s2: Sponsor = {
     id: rid("s"),
@@ -56,6 +62,10 @@ export function defaultContent(): LedContentState {
     bgColor: "#3f3f46",
     textColor: "#fafafa",
     logoDataUrl: null,
+    contentKind: "text",
+    mediaSrc: null,
+    mediaTitle: null,
+    mediaFit: "contain",
   };
   const s3: Sponsor = {
     id: rid("s"),
@@ -63,6 +73,10 @@ export function defaultContent(): LedContentState {
     bgColor: "#1e3a8a",
     textColor: "#eff6ff",
     logoDataUrl: null,
+    contentKind: "text",
+    mediaSrc: null,
+    mediaTitle: null,
+    mediaFit: "contain",
   };
   const sponsors = [s1, s2, s3];
   const playlist: PlaylistEntry[] = sponsors.map((s) => ({
@@ -241,7 +255,28 @@ function normalizeSponsor(x: unknown): Sponsor | null {
   if (typeof o.logoDataUrl === "string" && o.logoDataUrl.startsWith("data:image/")) {
     logoDataUrl = o.logoDataUrl.length <= 750_000 ? o.logoDataUrl : null;
   }
-  return { id, label, bgColor, textColor, logoDataUrl };
+  const contentKind: SponsorContentKind =
+    o.contentKind === "image" || o.contentKind === "video" ? o.contentKind : "text";
+  const mediaSrc =
+    typeof o.mediaSrc === "string" && o.mediaSrc.trim().length > 0 && o.mediaSrc.length <= 2_000_000
+      ? o.mediaSrc.trim()
+      : null;
+  const mediaTitle =
+    typeof o.mediaTitle === "string" && o.mediaTitle.trim().length > 0
+      ? o.mediaTitle.trim().slice(0, 180)
+      : null;
+  const mediaFit: MediaFit = o.mediaFit === "cover" ? "cover" : "contain";
+  return {
+    id,
+    label,
+    bgColor,
+    textColor,
+    logoDataUrl,
+    contentKind: mediaSrc ? contentKind : "text",
+    mediaSrc,
+    mediaTitle,
+    mediaFit,
+  };
 }
 
 function normalizePlaylistEntry(x: unknown): PlaylistEntry | null {
