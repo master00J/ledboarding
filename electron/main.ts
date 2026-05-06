@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { buildTexturePngBuffer, validateTextureBuildInput } from "./texture-export";
 
 const IS_DEV = !app.isPackaged;
 
@@ -144,6 +145,124 @@ ipcMain.handle("ledboarding:select-media-files", async () => {
       : await dialog.showOpenDialog(options);
   return res.canceled ? [] : res.filePaths;
 });
+
+ipcMain.handle("ledboarding:texture-select-source", async () => {
+  const options: OpenDialogOptions = {
+    title: "Kies sponsorbanner (afbeelding of video)",
+    properties: ["openFile"],
+    filters: [
+      {
+        name: "Afbeelding of video",
+        extensions: [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif",
+          "bmp",
+          "tif",
+          "tiff",
+          "mp4",
+          "webm",
+          "mov",
+          "avi",
+          "mkv",
+          "m4v",
+          "wmv",
+          "mpeg",
+          "mpg",
+        ],
+      },
+      { name: "Afbeelding", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"] },
+      { name: "Video", extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "mpeg", "mpg"] },
+    ],
+  };
+  const res =
+    controlWindow && !controlWindow.isDestroyed()
+      ? await dialog.showOpenDialog(controlWindow, options)
+      : await dialog.showOpenDialog(options);
+  if (res.canceled || !res.filePaths[0]) return null;
+  return res.filePaths[0];
+});
+
+ipcMain.handle("ledboarding:texture-preview", async (_event, raw: unknown) => {
+  try {
+    const v = validateTextureBuildInput(raw);
+    if (!v.ok) return { ok: false as const, error: v.error };
+    const buf = await buildTexturePngBuffer(v.value);
+    const maxPreviewBytes = 40 * 1024 * 1024;
+    if (buf.length > maxPreviewBytes) {
+      return {
+        ok: false as const,
+        error: "Voorbeeld te groot — verklein het canvas of exporteer direct naar bestand.",
+      };
+    }
+    return {
+      ok: true as const,
+      dataUrl: `data:image/png;base64,${buf.toString("base64")}`,
+      width: v.value.canvasWidth,
+      height: v.value.canvasHeight,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false as const, error: msg };
+  }
+});
+
+ipcMain.handle(
+  "ledboarding:texture-export-png",
+  async (
+    _event,
+    payload: unknown,
+  ): Promise<
+    | { ok: true; filePath: string }
+    | { ok: false; error: string; canceled?: boolean }
+  > => {
+    try {
+      const p = payload as {
+        build: unknown;
+        suggestedName?: string;
+        defaultDirectory?: string | null;
+      };
+      const v = validateTextureBuildInput(p?.build);
+      if (!v.ok) return { ok: false, error: v.error };
+      const buf = await buildTexturePngBuffer(v.value);
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const suggested =
+        typeof p.suggestedName === "string" && p.suggestedName.trim().length > 0
+          ? p.suggestedName.trim()
+          : `led-boarding-texture-${stamp}.png`;
+      const dir =
+        typeof p.defaultDirectory === "string" && p.defaultDirectory.trim().length > 0
+          ? p.defaultDirectory.trim()
+          : app.getPath("documents");
+      const defaultPath = path.join(dir, suggested.replace(/[/\\?%*:|"<>]/g, "_"));
+
+      const win =
+        controlWindow && !controlWindow.isDestroyed() ? controlWindow : BrowserWindow.getFocusedWindow();
+      const save = win
+        ? await dialog.showSaveDialog(win, {
+            title: "Texture opslaan als PNG",
+            defaultPath,
+            filters: [{ name: "PNG", extensions: ["png"] }],
+          })
+        : await dialog.showSaveDialog({
+            title: "Texture opslaan als PNG",
+            defaultPath,
+            filters: [{ name: "PNG", extensions: ["png"] }],
+          });
+      if (save.canceled || !save.filePath) {
+        return { ok: false, error: "Geannuleerd.", canceled: true };
+      }
+      fs.writeFileSync(save.filePath, buf);
+      await shell.showItemInFolder(save.filePath);
+      return { ok: true, filePath: save.filePath };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: msg };
+    }
+  },
+);
 
 app.whenReady().then(() => {
   createWindow();

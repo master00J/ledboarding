@@ -3,13 +3,14 @@ import { type ReactNode, useEffect, useMemo, useReducer, useState } from "react"
 import type { LedRegion, LedZone } from "@/types";
 import { loadContent, setActiveSegment } from "@/contentStorage";
 import { SetupContentSection } from "@/pages/SetupContentSection";
+import { TextureExportSection } from "@/pages/TextureExportSection";
 import { loadZones, saveZones } from "@/zoneStorage";
 
 function randomId(): string {
   return `z_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-type SetupTab = "dashboard" | "zones" | "content" | "playlists" | "backup";
+type SetupTab = "dashboard" | "zones" | "texture" | "content" | "playlists" | "backup";
 
 export function SetupPage() {
   const [tab, setTab] = useState<SetupTab>("dashboard");
@@ -134,6 +135,9 @@ export function SetupPage() {
         <TabButton active={tab === "zones"} onClick={() => setTab("zones")}>
           Zones &amp; output
         </TabButton>
+        <TabButton active={tab === "texture"} onClick={() => setTab("texture")}>
+          Texture-export
+        </TabButton>
         <TabButton active={tab === "content"} onClick={() => setTab("content")}>
           Content
         </TabButton>
@@ -179,6 +183,25 @@ export function SetupPage() {
               <InfoCard label="Zones" value={String(zones.length)} />
               <InfoCard label="Outputvensters open" value={String(openOutputs.length)} />
               <InfoCard label="Segment" value={activeSegment?.label ?? "—"} />
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Texture voor LED-controller</h2>
+                <p className="mt-1 max-w-2xl text-sm text-zinc-400">
+                  Maak van één sponsorbanner een PNG in exacte pixelmaten (strip + canvas) voor hardware
+                  die geen live HTML gebruikt — o.a. perimeter en hoeklint-setups.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTab("texture")}
+                className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+              >
+                Open texture-export
+              </button>
             </div>
           </section>
 
@@ -244,6 +267,8 @@ export function SetupPage() {
           </section>
         </div>
       )}
+
+      {tab === "texture" && <TextureExportSection />}
 
       {tab === "content" && <SetupContentSection view="content" />}
       {tab === "playlists" && <SetupContentSection view="playlists" />}

@@ -55,45 +55,73 @@ function FallbackCanvas({ zone, message }: { zone: LedZone; message: string }) {
   );
 }
 
-function SponsorChipRow({ sponsor, fontSize }: { sponsor: Sponsor; fontSize: number }) {
-  const imgH = Math.round(fontSize * 1.35);
-  const bg = sponsor.bgColor ?? "#18181b";
-  const fg = sponsor.textColor ?? "#fafafa";
+/** Eén slide in de scroll-marquee: volledige zone (breedte × hoogte) per sponsor — beeld/video vullen de lint zoals bij hold. */
+function SponsorScrollSlide({ sponsor, zone }: { sponsor: Sponsor; zone: LedZone }) {
+  const w = zone.widthPx;
+  const h = zone.heightPx;
   const mediaSrc = mediaSourceUrl(sponsor.mediaSrc);
-  return (
-    <span
-      className="inline-flex shrink-0 items-center gap-3 rounded-md px-4 py-2 font-semibold tracking-wide"
-      style={{ fontSize, backgroundColor: bg, color: fg }}
-    >
-      {sponsor.contentKind === "image" && mediaSrc ? (
+  const objectFit = sponsor.mediaFit === "cover" ? "cover" : "contain";
+  const bg = sponsor.bgColor ?? "#0f172a";
+  const fg = sponsor.textColor ?? "#f8fafc";
+  const fontSize = Math.max(16, Math.round(h * 0.22));
+  const logoMax = Math.round(h * 0.38);
+
+  if (sponsor.contentKind === "image" && mediaSrc) {
+    return (
+      <div className="relative shrink-0 overflow-hidden bg-black" style={{ width: w, height: h }}>
         <img
           src={mediaSrc}
           alt=""
-          className="shrink-0 object-contain"
-          style={{ height: imgH, maxWidth: imgH * 3.2 }}
+          className="h-full w-full"
+          style={{ objectFit }}
           draggable={false}
         />
-      ) : sponsor.contentKind === "video" && mediaSrc ? (
+        <SponsorOverlayLabel sponsor={sponsor} />
+      </div>
+    );
+  }
+
+  if (sponsor.contentKind === "video" && mediaSrc) {
+    return (
+      <div className="relative shrink-0 overflow-hidden bg-black" style={{ width: w, height: h }}>
         <video
           src={mediaSrc}
+          className="h-full w-full"
+          style={{ objectFit }}
           muted
           autoPlay
           loop
           playsInline
-          className="shrink-0 object-contain"
-          style={{ height: imgH, maxWidth: imgH * 3.2 }}
         />
-      ) : sponsor.logoDataUrl ? (
+        <SponsorOverlayLabel sponsor={sponsor} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex shrink-0 flex-col items-center justify-center gap-2 overflow-hidden px-4 text-center"
+      style={{ width: w, height: h, backgroundColor: bg, color: fg }}
+    >
+      {sponsor.logoDataUrl ? (
         <img
           src={sponsor.logoDataUrl}
           alt=""
-          className="shrink-0 object-contain"
-          style={{ height: imgH, maxWidth: imgH * 2.5 }}
+          className="object-contain"
+          style={{
+            maxHeight: logoMax,
+            maxWidth: Math.min(w * 0.88, logoMax * 4),
+          }}
           draggable={false}
         />
       ) : null}
-      <span>{sponsor.label}</span>
-    </span>
+      <div
+        className="line-clamp-2 max-w-full px-2 font-bold uppercase leading-tight tracking-wide"
+        style={{ fontSize }}
+      >
+        {sponsor.label}
+      </div>
+    </div>
   );
 }
 
@@ -106,29 +134,25 @@ function ScrollMarquee({
   entries: ResolvedPlaylistEntry[];
   loopDurationSec: number;
 }) {
-  const fontSize = Math.max(14, Math.round(zone.heightPx * 0.26));
-  const gap = Math.round(fontSize * 1.75);
+  const gap = Math.max(4, Math.round(zone.heightPx * 0.04));
   const dur = Math.max(12, Number.isFinite(loopDurationSec) ? loopDurationSec : 42);
 
   const half = (suffix: string) =>
     entries.map((e, i) => (
-      <SponsorChipRow
+      <SponsorScrollSlide
         key={`${suffix}-${e.sponsor.id}-${i}`}
         sponsor={e.sponsor}
-        fontSize={fontSize}
+        zone={zone}
       />
     ));
 
   return (
-    <div
-      className="flex h-full w-full items-center overflow-hidden bg-black"
-      style={{ paddingInline: Math.round(zone.heightPx * 0.06) }}
-    >
-      <div className="marquee-led flex w-max shrink-0 items-center" style={{ gap }}>
-        <div className="flex shrink-0 items-center" style={{ gap }}>
+    <div className="flex h-full w-full items-stretch overflow-hidden bg-black">
+      <div className="marquee-led flex h-full w-max shrink-0 items-stretch" style={{ gap }}>
+        <div className="flex h-full shrink-0 items-stretch" style={{ gap }}>
           {half("a")}
         </div>
-        <div className="flex shrink-0 items-center" style={{ gap }}>
+        <div className="flex h-full shrink-0 items-stretch" style={{ gap }}>
           {half("b")}
         </div>
       </div>
