@@ -1,5 +1,7 @@
 # ArenaCue LED boarding
 
+**Gebruikershandleiding (stap-voor-stap, in het Nederlands):** [HANDLEIDING.md](./HANDLEIDING.md)
+
 Aparte webapp voor perimeter/tribune LED-output: configureerbare **pixelcanvas per zone**, optioneel **vast LED-segment per zone**, sponsors met **logo**, **playlist per segment** (fallback naar live), **JSON export/import**, **sneltoetsen 1–9** op output, optionele **feed** (`VITE_ARENACUE_FEED_URL`) voor het globaal segment, en in de **desktop-app** een tab **Texture-export** (PNG voor LED-controllers via **sharp** + **ffmpeg-static**).
 
 ## Ontwikkeling
