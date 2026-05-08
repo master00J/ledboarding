@@ -27,6 +27,50 @@ function windowIconPath(): string | undefined {
 const outputWindows = new Map<string, BrowserWindow>();
 let controlWindow: BrowserWindow | null = null;
 
+const SOURCE_FILE_FILTERS: OpenDialogOptions["filters"] = [
+  {
+    name: "Afbeelding of video",
+    extensions: [
+      "png",
+      "jpg",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "tif",
+      "tiff",
+      "mp4",
+      "webm",
+      "mov",
+      "avi",
+      "mkv",
+      "m4v",
+      "wmv",
+      "mpeg",
+      "mpg",
+    ],
+  },
+  { name: "Afbeelding", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"] },
+  { name: "Video", extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "mpeg", "mpg"] },
+];
+
+function dialogParent(): BrowserWindow | null {
+  if (controlWindow && !controlWindow.isDestroyed()) return controlWindow;
+  return BrowserWindow.getFocusedWindow();
+}
+
+function sanitizeFilename(name: string): string {
+  const cleaned = name.replace(/[/\\?%*:|"<>]/g, "_").trim();
+  return cleaned.length > 0 ? cleaned : "banner.png";
+}
+
+function basenameNoExt(p: string): string {
+  const norm = p.replace(/\\/g, "/");
+  const file = norm.slice(norm.lastIndexOf("/") + 1);
+  const dot = file.lastIndexOf(".");
+  return dot > 0 ? file.slice(0, dot) : file;
+}
+
 function configureWindow(win: BrowserWindow): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -150,40 +194,193 @@ ipcMain.handle("ledboarding:texture-select-source", async () => {
   const options: OpenDialogOptions = {
     title: "Kies sponsorbanner (afbeelding of video)",
     properties: ["openFile"],
-    filters: [
-      {
-        name: "Afbeelding of video",
-        extensions: [
-          "png",
-          "jpg",
-          "jpeg",
-          "webp",
-          "gif",
-          "bmp",
-          "tif",
-          "tiff",
-          "mp4",
-          "webm",
-          "mov",
-          "avi",
-          "mkv",
-          "m4v",
-          "wmv",
-          "mpeg",
-          "mpg",
-        ],
-      },
-      { name: "Afbeelding", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"] },
-      { name: "Video", extensions: ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "mpeg", "mpg"] },
-    ],
+    filters: SOURCE_FILE_FILTERS,
   };
-  const res =
-    controlWindow && !controlWindow.isDestroyed()
-      ? await dialog.showOpenDialog(controlWindow, options)
-      : await dialog.showOpenDialog(options);
+  const parent = dialogParent();
+  const res = parent
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options);
   if (res.canceled || !res.filePaths[0]) return null;
   return res.filePaths[0];
 });
+
+ipcMain.handle("ledboarding:texture-select-sources", async () => {
+  const options: OpenDialogOptions = {
+    title: "Kies één of meerdere banners (batch)",
+    properties: ["openFile", "multiSelections"],
+    filters: SOURCE_FILE_FILTERS,
+  };
+  const parent = dialogParent();
+  const res = parent
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options);
+  if (res.canceled) return [];
+  return res.filePaths;
+});
+
+ipcMain.handle("ledboarding:pick-directory", async (_event, raw: unknown) => {
+  const initial =
+    raw && typeof raw === "object" && typeof (raw as { defaultPath?: unknown }).defaultPath === "string"
+      ? ((raw as { defaultPath: string }).defaultPath || "").trim()
+      : "";
+  const options: OpenDialogOptions = {
+    title: "Kies outputmap (LED boarding)",
+    properties: ["openDirectory", "createDirectory"],
+    defaultPath: initial || undefined,
+  };
+  const parent = dialogParent();
+  const res = parent
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options);
+  if (res.canceled || !res.filePaths[0]) return null;
+  return res.filePaths[0];
+});
+
+ipcMain.handle("ledboarding:open-folder", async (_event, raw: unknown) => {
+  if (typeof raw !== "string" || !raw.trim()) return false;
+  const dir = raw.trim();
+  try {
+    if (!fs.existsSync(dir)) return false;
+    await shell.openPath(dir);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle(
+  "ledboarding:texture-quick-export-png",
+  async (
+    _event,
+    payload: unknown,
+  ): Promise<{ ok: true; filePath: string } | { ok: false; error: string }> => {
+    try {
+      const p = payload as {
+        build: unknown;
+        outputDirectory?: string;
+        fileName?: string;
+        revealInFolder?: boolean;
+      };
+      const v = validateTextureBuildInput(p?.build);
+      if (!v.ok) return { ok: false, error: v.error };
+      const dir = typeof p.outputDirectory === "string" ? p.outputDirectory.trim() : "";
+      if (!dir) return { ok: false, error: "Geen outputmap ingesteld." };
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Outputmap kon niet aangemaakt worden: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+      const fileName = sanitizeFilename(
+        typeof p.fileName === "string" && p.fileName.trim().length > 0
+          ? p.fileName.trim()
+          : `${basenameNoExt(v.value.inputPath) || "banner"}-${v.value.canvasWidth}x${v.value.canvasHeight}.png`,
+      );
+      const filePath = path.join(dir, fileName);
+      const buf = await buildTexturePngBuffer(v.value);
+      fs.writeFileSync(filePath, buf);
+      if (p.revealInFolder) {
+        try {
+          await shell.showItemInFolder(filePath);
+        } catch {
+          /* ignore */
+        }
+      }
+      return { ok: true, filePath };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+);
+
+ipcMain.handle(
+  "ledboarding:texture-batch-export-png",
+  async (
+    _event,
+    payload: unknown,
+  ): Promise<
+    | {
+        ok: true;
+        outputDirectory: string;
+        results: Array<{ inputPath: string; ok: boolean; filePath?: string; error?: string }>;
+      }
+    | { ok: false; error: string }
+  > => {
+    try {
+      const p = payload as {
+        build: unknown;
+        inputPaths?: unknown;
+        outputDirectory?: string;
+        filenameTemplateRendered?: unknown;
+      };
+      const dir = typeof p.outputDirectory === "string" ? p.outputDirectory.trim() : "";
+      if (!dir) return { ok: false, error: "Geen outputmap ingesteld." };
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Outputmap kon niet aangemaakt worden: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+      const inputPaths = Array.isArray(p.inputPaths)
+        ? p.inputPaths.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        : [];
+      if (inputPaths.length === 0) return { ok: false, error: "Geen bronbestanden meegegeven." };
+
+      const renderedNames = Array.isArray(p.filenameTemplateRendered)
+        ? p.filenameTemplateRendered.map((s) => (typeof s === "string" ? s : ""))
+        : [];
+
+      const results: Array<{ inputPath: string; ok: boolean; filePath?: string; error?: string }> = [];
+      const usedNames = new Set<string>();
+
+      for (let i = 0; i < inputPaths.length; i += 1) {
+        const inputPath = inputPaths[i]!;
+        try {
+          const v = validateTextureBuildInput({ ...(p.build as object), inputPath });
+          if (!v.ok) {
+            results.push({ inputPath, ok: false, error: v.error });
+            continue;
+          }
+          const requested =
+            typeof renderedNames[i] === "string" && renderedNames[i]!.trim().length > 0
+              ? renderedNames[i]!
+              : `${basenameNoExt(inputPath) || "banner"}-${v.value.canvasWidth}x${v.value.canvasHeight}.png`;
+          let fileName = sanitizeFilename(requested);
+          if (usedNames.has(fileName.toLowerCase())) {
+            const dot = fileName.lastIndexOf(".");
+            const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+            const ext = dot > 0 ? fileName.slice(dot) : ".png";
+            let suffix = 2;
+            let candidate = `${stem}-${suffix}${ext}`;
+            while (usedNames.has(candidate.toLowerCase())) {
+              suffix += 1;
+              candidate = `${stem}-${suffix}${ext}`;
+            }
+            fileName = candidate;
+          }
+          usedNames.add(fileName.toLowerCase());
+          const filePath = path.join(dir, fileName);
+          const buf = await buildTexturePngBuffer(v.value);
+          fs.writeFileSync(filePath, buf);
+          results.push({ inputPath, ok: true, filePath });
+        } catch (err) {
+          results.push({
+            inputPath,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      return { ok: true, outputDirectory: dir, results };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+);
 
 ipcMain.handle("ledboarding:texture-preview", async (_event, raw: unknown) => {
   try {
@@ -236,10 +433,9 @@ ipcMain.handle(
         typeof p.defaultDirectory === "string" && p.defaultDirectory.trim().length > 0
           ? p.defaultDirectory.trim()
           : app.getPath("documents");
-      const defaultPath = path.join(dir, suggested.replace(/[/\\?%*:|"<>]/g, "_"));
+      const defaultPath = path.join(dir, sanitizeFilename(suggested));
 
-      const win =
-        controlWindow && !controlWindow.isDestroyed() ? controlWindow : BrowserWindow.getFocusedWindow();
+      const win = dialogParent();
       const save = win
         ? await dialog.showSaveDialog(win, {
             title: "Texture opslaan als PNG",

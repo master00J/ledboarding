@@ -56,7 +56,8 @@ In het control panel: tab **Texture-export** (alleen in de **Electron**-app, nie
 1. Kies een **bronafbeelding** (PNG, JPEG, WebP, …) of **video** (MP4, WebM, MOV, …): voor video wordt het **eerste frame** (t ≈ 0) met **FFmpeg** naar een tijdelijke PNG geëxporteerd, daarna dezelfde pijplijn als bij een foto.
 2. Stel **strip** in (exacte pixels op de lint, bv. `1920×72`) en **cover** (vullen) of **contain** (passend + zwarte rand).
 3. Stel **outputcanvas** in (bv. `1920×990`) en kies **onder elkaar** of **diagonaal verschoven** (shift per rij).
-4. **Voorbeeld** (live) en **Exporteren als PNG** via save-dialog; de map van je laatste export wordt onthouden.
+4. Stel een **vaste outputmap** in (bv. `C:\Users\BrightBoard\boarding`) en een **bestandsnaam-sjabloon** (`{name}-{cw}x{ch}.png`).
+5. **Voorbeeld** (live) + drie export-knoppen: **Snel opslaan** (geen dialog, direct in outputmap), **Batch exporteren** (meerdere banners tegelijk), of **Opslaan als…** voor een eenmalige save-dialog.
 
 Techniek: **ffmpeg-static** (eerste videoframe) en **sharp** (`electron/texture-export.ts`, `electron/video-frame.ts`) in het Electron-mainproces.
 
@@ -67,5 +68,5 @@ Zie ter referentie: [mastery.com/ledboard](https://mastery.com/ledboard/) onder 
 | Onderwerp | Idee |
 |-----------|------|
 | **Video** | Tijdstip kiezen (niet alleen eerste frame), of korte clip naar frame-atlas |
-| **PNG-reeks / automatische map** | Batch export naar vaste map zonder dialoog |
+| **Watch-folder** | Inputmap pollen en automatisch elke nieuwe banner exporteren |
 | **Koppeling live-app** | Genormaliseerde strip direct als sponsor-`mediaSrc` kiezen |

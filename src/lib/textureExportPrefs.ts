@@ -34,6 +34,15 @@ export type TextureExportPrefs = {
   lastSourcePath: string;
   /** Map van laatste succesvolle export (voor standaard in save dialog). */
   lastExportDirectory: string;
+  /**
+   * Vaste outputmap voor "snel opslaan" en batch (typisch bv. `C:\Users\BrightBoard\boarding`).
+   * Leeg = altijd via save-dialog.
+   */
+  outputDirectory: string;
+  /**
+   * Bestandsnaam-sjabloon. Tokens: {name} {cw} {ch} {sw} {sh} {date} {time} {layout} {fit}.
+   */
+  filenameTemplate: string;
 };
 
 const DEFAULTS: TextureExportPrefs = {
@@ -46,6 +55,8 @@ const DEFAULTS: TextureExportPrefs = {
   wrappedShiftPx: 96,
   lastSourcePath: "",
   lastExportDirectory: "",
+  outputDirectory: "",
+  filenameTemplate: "{name}-{cw}x{ch}.png",
 };
 
 function clampInt(n: number, lo: number, hi: number): number {
@@ -68,6 +79,12 @@ function parsePrefs(raw: string | null): TextureExportPrefs {
       lastSourcePath: typeof o.lastSourcePath === "string" ? o.lastSourcePath : "",
       lastExportDirectory:
         typeof o.lastExportDirectory === "string" ? o.lastExportDirectory : "",
+      outputDirectory:
+        typeof o.outputDirectory === "string" ? o.outputDirectory : "",
+      filenameTemplate:
+        typeof o.filenameTemplate === "string" && o.filenameTemplate.trim()
+          ? o.filenameTemplate
+          : DEFAULTS.filenameTemplate,
     };
   } catch {
     return { ...DEFAULTS };
@@ -94,7 +111,42 @@ export function applyPerimeterPreset(): TextureExportPrefs {
     ...DEFAULTS,
     lastSourcePath: cur.lastSourcePath,
     lastExportDirectory: cur.lastExportDirectory,
+    outputDirectory: cur.outputDirectory,
+    filenameTemplate: cur.filenameTemplate,
   };
+}
+
+/** Vervang tokens in een bestandsnaam-sjabloon. Sanitize gebeurt in main process. */
+export function renderFilenameTemplate(
+  template: string,
+  ctx: {
+    name: string;
+    canvasWidth: number;
+    canvasHeight: number;
+    stripWidth: number;
+    stripHeight: number;
+    layout: TextureLayoutMode;
+    fit: TextureFitMode;
+  },
+): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const tokens: Record<string, string> = {
+    name: ctx.name || "banner",
+    cw: String(ctx.canvasWidth),
+    ch: String(ctx.canvasHeight),
+    sw: String(ctx.stripWidth),
+    sh: String(ctx.stripHeight),
+    layout: ctx.layout,
+    fit: ctx.fit,
+    date,
+    time,
+  };
+  let out = template.replace(/\{(\w+)\}/g, (_m, key: string) => tokens[key] ?? `{${key}}`);
+  if (!/\.png$/i.test(out)) out += ".png";
+  return out;
 }
 
 export { DEFAULTS as textureExportDefaultPrefs };

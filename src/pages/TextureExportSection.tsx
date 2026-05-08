@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyPerimeterPreset,
   loadTextureExportPrefs,
+  renderFilenameTemplate,
   saveTextureExportPrefs,
   type TextureBuildPayload,
   type TextureExportPrefs,
@@ -11,6 +12,11 @@ function fileNameFromPath(p: string): string {
   const s = p.replace(/\\/g, "/");
   const i = s.lastIndexOf("/");
   return i >= 0 ? s.slice(i + 1) : s;
+}
+
+function baseNameFromPath(p: string): string {
+  const file = fileNameFromPath(p);
+  return file.replace(/\.[^.]+$/, "") || "banner";
 }
 
 function buildPayload(prefs: TextureExportPrefs, sourcePath: string): TextureBuildPayload {
@@ -26,6 +32,20 @@ function buildPayload(prefs: TextureExportPrefs, sourcePath: string): TextureBui
   };
 }
 
+function templateForName(prefs: TextureExportPrefs, sourcePath: string): string {
+  return renderFilenameTemplate(prefs.filenameTemplate, {
+    name: baseNameFromPath(sourcePath),
+    canvasWidth: prefs.canvasWidth,
+    canvasHeight: prefs.canvasHeight,
+    stripWidth: prefs.stripWidth,
+    stripHeight: prefs.stripHeight,
+    layout: prefs.layout,
+    fit: prefs.fit,
+  });
+}
+
+type BatchRow = { inputPath: string; ok: boolean; filePath?: string; error?: string };
+
 export function TextureExportSection() {
   const isDesktop = typeof window !== "undefined" && Boolean(window.ledboarding?.texturePreview);
 
@@ -36,6 +56,8 @@ export function TextureExportSection() {
   const [exportLoading, setExportLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [batchRows, setBatchRows] = useState<BatchRow[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persist = useCallback((next: TextureExportPrefs) => {
@@ -89,6 +111,89 @@ export function TextureExportSection() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [isDesktop, sourcePath, prefs, runPreview]);
+
+  const pickOutputDirectory = useCallback(async () => {
+    if (!window.ledboarding?.pickDirectory) return;
+    const chosen = await window.ledboarding.pickDirectory(prefs.outputDirectory || prefs.lastExportDirectory);
+    if (!chosen) return;
+    persist({ ...prefs, outputDirectory: chosen });
+  }, [prefs, persist]);
+
+  const openOutputFolder = useCallback(async () => {
+    if (!window.ledboarding?.openFolder || !prefs.outputDirectory.trim()) return;
+    await window.ledboarding.openFolder(prefs.outputDirectory.trim());
+  }, [prefs.outputDirectory]);
+
+  const quickExport = useCallback(async () => {
+    if (!window.ledboarding?.textureQuickExportPng) return;
+    if (!sourcePath.trim()) {
+      setPreviewError("Kies eerst een bronafbeelding.");
+      return;
+    }
+    if (!prefs.outputDirectory.trim()) {
+      setExportMessage("Stel eerst een outputmap in.");
+      return;
+    }
+    setExportLoading(true);
+    setExportMessage(null);
+    setPreviewError(null);
+    try {
+      const build = buildPayload(prefs, sourcePath.trim());
+      const fileName = templateForName(prefs, sourcePath.trim());
+      const res = await window.ledboarding.textureQuickExportPng({
+        build,
+        outputDirectory: prefs.outputDirectory.trim(),
+        fileName,
+        revealInFolder: false,
+      });
+      if (!res.ok) {
+        setExportMessage(res.error);
+        return;
+      }
+      setExportMessage(`Opgeslagen: ${res.filePath}`);
+    } catch (e) {
+      setExportMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportLoading(false);
+    }
+  }, [prefs, sourcePath]);
+
+  const batchExport = useCallback(async () => {
+    if (!window.ledboarding?.textureSelectSources || !window.ledboarding?.textureBatchExportPng) return;
+    if (!prefs.outputDirectory.trim()) {
+      setExportMessage("Stel eerst een outputmap in.");
+      return;
+    }
+    const inputs = await window.ledboarding.textureSelectSources();
+    if (!inputs || inputs.length === 0) return;
+    setBatchLoading(true);
+    setBatchRows([]);
+    setExportMessage(null);
+    setPreviewError(null);
+    try {
+      const build = buildPayload(prefs, inputs[0]!);
+      const filenameTemplateRendered = inputs.map((p) => templateForName(prefs, p));
+      const res = await window.ledboarding.textureBatchExportPng({
+        build,
+        inputPaths: inputs,
+        outputDirectory: prefs.outputDirectory.trim(),
+        filenameTemplateRendered,
+      });
+      if (!res.ok) {
+        setExportMessage(res.error);
+        return;
+      }
+      setBatchRows(res.results);
+      const okCount = res.results.filter((r) => r.ok).length;
+      setExportMessage(
+        `Batch klaar: ${okCount}/${res.results.length} bestanden opgeslagen in ${res.outputDirectory}`,
+      );
+    } catch (e) {
+      setExportMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBatchLoading(false);
+    }
+  }, [prefs]);
 
   const exportPng = useCallback(async () => {
     if (!window.ledboarding?.textureExportPng) return;
@@ -160,12 +265,13 @@ export function TextureExportSection() {
             </span>
           )}
         </div>
-        <ol className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[
             { n: "1", t: "Bron", d: "Beeld of video (eerste frame)" },
             { n: "2", t: "Strip", d: "Exacte lint-resolutie" },
             { n: "3", t: "Canvas + tiling", d: "Onder elkaar of verschoven" },
-            { n: "4", t: "Voorbeeld & export", d: "PNG naar schijf" },
+            { n: "4", t: "Outputmap", d: "Vaste map + bestandsnaam-sjabloon" },
+            { n: "5", t: "Voorbeeld & export", d: "Snel, batch of save-dialog" },
           ].map((s) => (
             <li
               key={s.n}
@@ -433,26 +539,135 @@ export function TextureExportSection() {
       </section>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <h3 className="text-sm font-semibold text-white">Outputmap</h3>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+          Vaste map waar de LED-controller de PNG-bestanden ophaalt (bv.{" "}
+          <code className="rounded bg-zinc-800 px-1 py-0.5 text-[11px] text-zinc-200">
+            C:\Users\BrightBoard\boarding
+          </code>
+          ). Met &quot;Snel opslaan&quot; en &quot;Batch exporteren&quot; wordt het bestand zonder dialog meteen daar
+          geplaatst.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={!isDesktop}
+            onClick={() => void pickOutputDirectory()}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Outputmap kiezen…
+          </button>
+          <button
+            type="button"
+            disabled={!isDesktop || !prefs.outputDirectory.trim()}
+            onClick={() => void openOutputFolder()}
+            className="rounded-lg border border-zinc-600 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Map openen
+          </button>
+          {prefs.outputDirectory ? (
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300" title={prefs.outputDirectory}>
+              {prefs.outputDirectory}
+            </span>
+          ) : (
+            <span className="text-xs text-zinc-500">Nog geen vaste outputmap. (Save-dialog wordt gebruikt.)</span>
+          )}
+        </div>
+        <label className="mt-4 block max-w-xl">
+          <span className="text-xs font-medium text-zinc-500">Bestandsnaam-sjabloon</span>
+          <input
+            type="text"
+            spellCheck={false}
+            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-emerald-500/50"
+            value={prefs.filenameTemplate}
+            onChange={(e) => persist({ ...prefs, filenameTemplate: e.target.value })}
+          />
+          <span className="mt-1 block text-[11px] text-zinc-500">
+            Tokens: <code className="text-zinc-300">{"{name} {cw} {ch} {sw} {sh} {layout} {fit} {date} {time}"}</code>.
+            Voorbeeld nu:{" "}
+            <span className="font-mono text-zinc-300">
+              {templateForName(prefs, sourcePath || "banner")}
+            </span>
+          </span>
+        </label>
+      </section>
+
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
         <h3 className="text-sm font-semibold text-white">Exporteren</h3>
         <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-          Kies map en bestandsnaam in het systeemvenster. Vaak hoort het bestand in een vaste exportmap op
-          de regie- of playout-machine; de map van je laatste succesvolle export wordt automatisch als
-          startpunt voorgesteld.
+          <strong className="text-zinc-300">Snel opslaan</strong> schrijft direct in de outputmap met je sjabloon — geen
+          dialog. <strong className="text-zinc-300">Batch</strong> verwerkt meerdere banners met dezelfde strip- en
+          canvas-instellingen. <strong className="text-zinc-300">Opslaan als…</strong> opent de Windows save-dialog voor
+          afwijkende exports.
         </p>
-        <button
-          type="button"
-          disabled={!isDesktop || exportLoading || Boolean(validationHint)}
-          onClick={() => void exportPng()}
-          className="mt-4 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {exportLoading ? "Exporteren…" : "Exporteren als PNG…"}
-        </button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={
+              !isDesktop ||
+              exportLoading ||
+              batchLoading ||
+              Boolean(validationHint) ||
+              !sourcePath.trim() ||
+              !prefs.outputDirectory.trim()
+            }
+            onClick={() => void quickExport()}
+            className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            title={
+              !prefs.outputDirectory.trim()
+                ? "Eerst outputmap instellen"
+                : !sourcePath.trim()
+                  ? "Eerst bronafbeelding kiezen"
+                  : "Opslaan in de outputmap zonder dialog"
+            }
+          >
+            {exportLoading ? "Bezig…" : "Snel opslaan in outputmap"}
+          </button>
+          <button
+            type="button"
+            disabled={
+              !isDesktop || exportLoading || batchLoading || Boolean(validationHint) || !prefs.outputDirectory.trim()
+            }
+            onClick={() => void batchExport()}
+            className="rounded-lg bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
+            title={!prefs.outputDirectory.trim() ? "Eerst outputmap instellen" : "Meerdere bestanden tegelijk verwerken"}
+          >
+            {batchLoading ? "Batch bezig…" : "Batch exporteren…"}
+          </button>
+          <button
+            type="button"
+            disabled={!isDesktop || exportLoading || batchLoading || Boolean(validationHint)}
+            onClick={() => void exportPng()}
+            className="rounded-lg border border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Opslaan als…
+          </button>
+        </div>
         {exportMessage && (
           <p
-            className={`mt-3 text-sm ${exportMessage.includes("Opgeslagen") ? "text-emerald-400" : "text-zinc-400"}`}
+            className={`mt-3 text-sm ${
+              exportMessage.includes("Opgeslagen") || exportMessage.includes("Batch klaar")
+                ? "text-emerald-400"
+                : "text-zinc-400"
+            }`}
           >
             {exportMessage}
           </p>
+        )}
+        {batchRows.length > 0 && (
+          <ul className="mt-4 max-h-64 space-y-1 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 font-mono text-[11px]">
+            {batchRows.map((row, i) => (
+              <li
+                key={`${row.inputPath}-${i}`}
+                className={row.ok ? "text-emerald-300" : "text-red-300"}
+                title={row.error || row.filePath}
+              >
+                {row.ok ? "✓" : "✗"} {fileNameFromPath(row.inputPath)}
+                {row.ok && row.filePath ? ` → ${fileNameFromPath(row.filePath)}` : ""}
+                {!row.ok && row.error ? ` — ${row.error}` : ""}
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </div>
