@@ -55,6 +55,7 @@ export function defaultContent(): LedContentState {
     mediaSrc: null,
     mediaTitle: null,
     mediaFit: "contain",
+    targetMinutesPerMatch: 0,
   };
   const s2: Sponsor = {
     id: rid("s"),
@@ -66,6 +67,7 @@ export function defaultContent(): LedContentState {
     mediaSrc: null,
     mediaTitle: null,
     mediaFit: "contain",
+    targetMinutesPerMatch: 0,
   };
   const s3: Sponsor = {
     id: rid("s"),
@@ -77,6 +79,7 @@ export function defaultContent(): LedContentState {
     mediaSrc: null,
     mediaTitle: null,
     mediaFit: "contain",
+    targetMinutesPerMatch: 0,
   };
   const sponsors = [s1, s2, s3];
   const playlist: PlaylistEntry[] = sponsors.map((s) => ({
@@ -87,6 +90,8 @@ export function defaultContent(): LedContentState {
     settings: {
       playbackMode: "scroll",
       scrollLoopDurationSec: 42,
+      brightnessPercent: 100,
+      fadeTransitionMs: 500,
       feedFollowSegment: false,
     },
     sponsors,
@@ -215,9 +220,13 @@ function ensureCoreSegments(segments: PlaylistSegment[], sponsors: Sponsor[]): P
 function normalizeSettings(o: Record<string, unknown>): LedContentState["settings"] {
   const mode: PlaybackMode = o.playbackMode === "hold" ? "hold" : "scroll";
   const scrollLoopDurationSec = clampNum(o.scrollLoopDurationSec, 12, 240, 42);
+  const brightnessPercent = clampNum(o.brightnessPercent, 1, 100, 100);
+  const fadeTransitionMs = clampNum(o.fadeTransitionMs, 0, 2000, 500);
   return {
     playbackMode: mode,
     scrollLoopDurationSec,
+    brightnessPercent,
+    fadeTransitionMs,
     feedFollowSegment: o.feedFollowSegment === true,
   };
 }
@@ -266,6 +275,7 @@ function normalizeSponsor(x: unknown): Sponsor | null {
       ? o.mediaTitle.trim().slice(0, 180)
       : null;
   const mediaFit: MediaFit = o.mediaFit === "cover" ? "cover" : "contain";
+  const targetMinutesPerMatch = clampNum(o.targetMinutesPerMatch, 0, 999, 0);
   return {
     id,
     label,
@@ -276,6 +286,7 @@ function normalizeSponsor(x: unknown): Sponsor | null {
     mediaSrc,
     mediaTitle,
     mediaFit,
+    targetMinutesPerMatch,
   };
 }
 

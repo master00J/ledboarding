@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PlaylistEntry, Sponsor } from "@/types";
 
 export function PlaylistRowsEditor({
@@ -11,6 +12,8 @@ export function PlaylistRowsEditor({
   onChange: (next: PlaylistEntry[]) => void;
   disabled?: boolean;
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
   function updateRow(idx: number, patch: Partial<PlaylistEntry>) {
     onChange(playlist.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
   }
@@ -26,6 +29,17 @@ export function PlaylistRowsEditor({
     const tmp = copy[idx]!;
     copy[idx] = copy[j]!;
     copy[j] = tmp;
+    onChange(copy);
+  }
+
+  function moveRowTo(idx: number, targetIdx: number) {
+    if (idx === targetIdx || idx < 0 || targetIdx < 0 || idx >= playlist.length || targetIdx >= playlist.length) {
+      return;
+    }
+    const copy = [...playlist];
+    const [row] = copy.splice(idx, 1);
+    if (!row) return;
+    copy.splice(targetIdx, 0, row);
     onChange(copy);
   }
 
@@ -48,7 +62,22 @@ export function PlaylistRowsEditor({
           {playlist.map((row, idx) => (
             <li
               key={`${row.sponsorId}-${idx}`}
-              className="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2"
+              draggable={!disabled}
+              onDragStart={() => setDragIndex(idx)}
+              onDragOver={(e) => {
+                if (!disabled) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragIndex !== null) moveRowTo(dragIndex, idx);
+                setDragIndex(null);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              className={`flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 ${
+                dragIndex === idx
+                  ? "border-emerald-500 bg-emerald-950/30"
+                  : "border-zinc-800 bg-zinc-950/60"
+              } ${disabled ? "" : "cursor-grab active:cursor-grabbing"}`}
             >
               <span className="w-7 text-center font-mono text-[10px] text-zinc-500">{idx + 1}</span>
               <select

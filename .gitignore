@@ -1,8 +1,10 @@
 node_modules
+.tools
 renderer-dist
 electron-dist
 build
 dist
+visuals ledboarding
 .DS_Store
 *.local
 .env

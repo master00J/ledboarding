@@ -4,6 +4,7 @@ import { LedCanvas } from "@/components/LedCanvas";
 import { SponsorPlayback } from "@/components/SponsorPlayback";
 import { loadContent, setActiveSegment } from "@/contentStorage";
 import { useArenaCueFeed } from "@/hooks/useArenaCueFeed";
+import { LIVE_PLAYBACK_EVENT, loadLivePlayback, restartLivePlayback } from "@/livePlaybackStorage";
 import {
   effectiveSegmentId,
   segmentsForShortcuts,
@@ -28,7 +29,11 @@ export function DisplayPage() {
       bumpSync();
     }
     window.addEventListener("ledboarding-update", onLocal);
-    return () => window.removeEventListener("ledboarding-update", onLocal);
+    window.addEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+    return () => {
+      window.removeEventListener("ledboarding-update", onLocal);
+      window.removeEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+    };
   }, []);
 
   const effectiveSegId = useMemo(
@@ -40,6 +45,7 @@ export function DisplayPage() {
     const s = boardContent.segments.find((x) => x.id === effectiveSegId);
     return s?.label ?? effectiveSegId;
   }, [boardContent.segments, effectiveSegId]);
+  const live = useMemo(() => loadLivePlayback(), [syncTick]);
 
   const shortcutLegend = useMemo(() => {
     return segmentsForShortcuts(boardContent)
@@ -85,6 +91,7 @@ export function DisplayPage() {
             } else {
               setActiveSegment(seg.id);
             }
+            restartLivePlayback(0);
             bumpSync();
             return;
           }
@@ -119,6 +126,7 @@ export function DisplayPage() {
       ? zone.segmentId!.trim()
       : boardContent.activeSegmentId
     : boardContent.activeSegmentId;
+  const showOutputControls = !window.ledboarding;
 
   return (
     <div className="flex min-h-screen flex-col bg-black text-white">
@@ -126,6 +134,7 @@ export function DisplayPage() {
         ref={wrapRef}
         className="flex min-h-0 flex-1 items-center justify-center bg-black"
       >
+        <div style={{ filter: `brightness(${Math.max(1, Math.min(100, boardContent.settings.brightnessPercent))}%)` }}>
         <LedCanvas widthPx={zone.widthPx} heightPx={zone.heightPx}>
           {zone.regions && zone.regions.length > 0 ? (
             <div className="relative h-full w-full bg-black">
@@ -158,8 +167,10 @@ export function DisplayPage() {
             <SponsorPlayback zone={zone} />
           )}
         </LedCanvas>
+        </div>
       </div>
 
+      {showOutputControls && (
       <footer className="shrink-0 border-t border-zinc-900 bg-zinc-950 px-4 py-3 text-xs text-zinc-500">
         <div className="mx-auto flex max-w-4xl flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -174,6 +185,16 @@ export function DisplayPage() {
                     <span className="text-red-500/85"> (onbekend segment-id)</span>
                   )
                 ) : null}
+                <span className="ml-2 text-zinc-600">
+                  · live:{" "}
+                  <strong className={live.status === "playing" ? "text-emerald-500" : "text-amber-500"}>
+                    {live.overrideMode === "blackout"
+                      ? "blackout"
+                      : live.overrideMode === "testPattern"
+                        ? "testbeeld"
+                        : live.status}
+                  </strong>
+                </span>
               </span>
             </span>
             <div className="flex flex-wrap gap-3">
@@ -204,6 +225,7 @@ export function DisplayPage() {
                   } else {
                     setActiveSegment(v);
                   }
+                  restartLivePlayback(0);
                   bumpSync();
                 }}
               >
@@ -229,6 +251,7 @@ export function DisplayPage() {
         </div>
         {fullError && <p className="mx-auto mt-2 max-w-4xl text-red-400">{fullError}</p>}
       </footer>
+      )}
     </div>
   );
 }

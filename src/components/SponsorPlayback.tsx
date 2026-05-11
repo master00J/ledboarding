@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import type { LedZone, ResolvedPlaylistEntry, Sponsor } from "@/types";
 import { loadContent } from "@/contentStorage";
+import {
+  LIVE_PLAYBACK_EVENT,
+  loadLivePlayback,
+  updateLivePlayback,
+} from "@/livePlaybackStorage";
 import { mediaSourceUrl } from "@/mediaSource";
 import { effectivePlayback, resolveActivePlaylist } from "@/playlistResolve";
 
@@ -16,22 +21,35 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
     }
     window.addEventListener("storage", onStorage);
     window.addEventListener("ledboarding-update", onLocal);
+    window.addEventListener(LIVE_PLAYBACK_EVENT, onLocal);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("ledboarding-update", onLocal);
+      window.removeEventListener(LIVE_PLAYBACK_EVENT, onLocal);
     };
   }, []);
 
   const content = useMemo(() => loadContent(), [tick]);
+  const live = useMemo(() => loadLivePlayback(), [tick]);
   const entries = useMemo(() => resolveActivePlaylist(content, zone), [content, zone]);
   const playback = useMemo(() => effectivePlayback(content, zone), [content, zone]);
+  const fadeTransitionMs = content.settings.fadeTransitionMs;
+  const containsVideo = entries.some((entry) => entry.sponsor.contentKind === "video" && entry.sponsor.mediaSrc);
+
+  if (live.overrideMode === "blackout") {
+    return <BlackoutCanvas />;
+  }
+
+  if (live.overrideMode === "testPattern") {
+    return <TestPatternCanvas zone={zone} />;
+  }
 
   if (entries.length === 0) {
     return <FallbackCanvas zone={zone} message="Geen playlist — voeg sponsors toe in instellingen." />;
   }
 
-  if (playback.mode === "hold") {
-    return <HoldCarousel zone={zone} entries={entries} />;
+  if (playback.mode === "hold" || containsVideo) {
+    return <HoldCarousel zone={zone} entries={entries} live={live} fadeTransitionMs={fadeTransitionMs} />;
   }
 
   return (
@@ -39,7 +57,31 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
       zone={zone}
       entries={entries}
       loopDurationSec={playback.scrollLoopDurationSec}
+      paused={live.status === "paused"}
     />
+  );
+}
+
+function BlackoutCanvas() {
+  return <div className="h-full w-full bg-black" />;
+}
+
+function TestPatternCanvas({ zone }: { zone: LedZone }) {
+  const fontSize = Math.max(12, Math.round(zone.heightPx * 0.1));
+  return (
+    <div
+      className="relative grid h-full w-full grid-cols-8 overflow-hidden bg-black text-white"
+      style={{ fontSize }}
+    >
+      {["#ffffff", "#facc15", "#06b6d4", "#22c55e", "#ec4899", "#ef4444", "#2563eb", "#000000"].map(
+        (color) => (
+          <div key={color} style={{ backgroundColor: color }} />
+        ),
+      )}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-center font-black uppercase tracking-[0.25em] drop-shadow">
+        Testbeeld · {zone.widthPx}×{zone.heightPx}
+      </div>
+    </div>
   );
 }
 
@@ -52,6 +94,58 @@ function FallbackCanvas({ zone, message }: { zone: LedZone; message: string }) {
     >
       {message}
     </div>
+  );
+}
+
+function MediaFrame({
+  src,
+  kind,
+  objectFit,
+  loop,
+}: {
+  src: string;
+  kind: "image" | "video";
+  objectFit: "contain" | "cover";
+  loop?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-black px-4 text-center text-white/75">
+        Media kan niet geladen worden. Controleer of het bestand nog bestaat en afspeelbaar is.
+      </div>
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <video
+        src={src}
+        className="h-full w-full"
+        style={{ objectFit }}
+        muted
+        autoPlay
+        loop={loop}
+        playsInline
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-full w-full"
+      style={{ objectFit }}
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -69,14 +163,7 @@ function SponsorScrollSlide({ sponsor, zone }: { sponsor: Sponsor; zone: LedZone
   if (sponsor.contentKind === "image" && mediaSrc) {
     return (
       <div className="relative shrink-0 overflow-hidden bg-black" style={{ width: w, height: h }}>
-        <img
-          src={mediaSrc}
-          alt=""
-          className="h-full w-full"
-          style={{ objectFit }}
-          draggable={false}
-        />
-        <SponsorOverlayLabel sponsor={sponsor} />
+        <MediaFrame src={mediaSrc} kind="image" objectFit={objectFit} />
       </div>
     );
   }
@@ -84,16 +171,7 @@ function SponsorScrollSlide({ sponsor, zone }: { sponsor: Sponsor; zone: LedZone
   if (sponsor.contentKind === "video" && mediaSrc) {
     return (
       <div className="relative shrink-0 overflow-hidden bg-black" style={{ width: w, height: h }}>
-        <video
-          src={mediaSrc}
-          className="h-full w-full"
-          style={{ objectFit }}
-          muted
-          autoPlay
-          loop
-          playsInline
-        />
-        <SponsorOverlayLabel sponsor={sponsor} />
+        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop />
       </div>
     );
   }
@@ -129,10 +207,12 @@ function ScrollMarquee({
   zone,
   entries,
   loopDurationSec,
+  paused,
 }: {
   zone: LedZone;
   entries: ResolvedPlaylistEntry[];
   loopDurationSec: number;
+  paused: boolean;
 }) {
   const gap = Math.max(4, Math.round(zone.heightPx * 0.04));
   const dur = Math.max(12, Number.isFinite(loopDurationSec) ? loopDurationSec : 42);
@@ -148,7 +228,10 @@ function ScrollMarquee({
 
   return (
     <div className="flex h-full w-full items-stretch overflow-hidden bg-black">
-      <div className="marquee-led flex h-full w-max shrink-0 items-stretch" style={{ gap }}>
+      <div
+        className="marquee-led flex h-full w-max shrink-0 items-stretch"
+        style={{ gap, animationPlayState: paused ? "paused" : "running" }}
+      >
         <div className="flex h-full shrink-0 items-stretch" style={{ gap }}>
           {half("a")}
         </div>
@@ -169,43 +252,28 @@ function ScrollMarquee({
   );
 }
 
-function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlaylistEntry[] }) {
+function HoldCarousel({
+  zone,
+  entries,
+  live,
+  fadeTransitionMs,
+}: {
+  zone: LedZone;
+  entries: ResolvedPlaylistEntry[];
+  live: ReturnType<typeof loadLivePlayback>;
+  fadeTransitionMs: number;
+}) {
   const sig = entries.map((e) => `${e.sponsor.id}:${e.durationSec}`).join("|");
-  const [index, setIndex] = useState(0);
-  const entriesRef = useRef(entries);
-  entriesRef.current = entries;
 
   useEffect(() => {
-    setIndex(0);
+    updateLivePlayback((state) => ({
+      ...state,
+      itemIndex: Math.min(state.itemIndex, Math.max(0, entries.length - 1)),
+      updatedAtMs: Date.now(),
+    }));
   }, [sig]);
 
-  useEffect(() => {
-    const list = entriesRef.current;
-    if (list.length === 0) return;
-
-    let i = 0;
-    let cancelled = false;
-    let tid: ReturnType<typeof setTimeout>;
-
-    function arm() {
-      const cur = entriesRef.current;
-      const ms = Math.max(2000, (cur[i]?.durationSec ?? 8) * 1000);
-      tid = setTimeout(() => {
-        if (cancelled) return;
-        i = (i + 1) % cur.length;
-        setIndex(i);
-        arm();
-      }, ms);
-    }
-
-    arm();
-    return () => {
-      cancelled = true;
-      clearTimeout(tid);
-    };
-  }, [sig]);
-
-  const safeIdx = index % entries.length;
+  const safeIdx = live.itemIndex % entries.length;
   const sponsor = entries[safeIdx]!.sponsor;
   const fontSize = Math.max(18, Math.round(zone.heightPx * 0.34));
   const logoMax = Math.round(zone.heightPx * 0.42);
@@ -213,35 +281,24 @@ function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlayl
   const fg = sponsor.textColor ?? "#f8fafc";
   const mediaSrc = mediaSourceUrl(sponsor.mediaSrc);
   const objectFit = sponsor.mediaFit === "cover" ? "cover" : "contain";
+  const animationStyle = fadeTransitionMs > 0
+    ? { animation: `sponsor-hold-fade ${fadeTransitionMs}ms ease-out` }
+    : undefined;
 
   if (sponsor.contentKind === "image" && mediaSrc) {
     return (
-      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black sponsor-hold-pop">
-        <img
-          src={mediaSrc}
-          alt=""
-          className="h-full w-full"
-          style={{ objectFit }}
-          draggable={false}
-        />
-        <SponsorOverlayLabel sponsor={sponsor} />
+      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black" style={animationStyle}>
+        <HoldFadeStyle />
+        <MediaFrame src={mediaSrc} kind="image" objectFit={objectFit} />
       </div>
     );
   }
 
   if (sponsor.contentKind === "video" && mediaSrc) {
     return (
-      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black sponsor-hold-pop">
-        <video
-          src={mediaSrc}
-          className="h-full w-full"
-          style={{ objectFit }}
-          muted
-          autoPlay
-          loop
-          playsInline
-        />
-        <SponsorOverlayLabel sponsor={sponsor} />
+      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black" style={animationStyle}>
+        <HoldFadeStyle />
+        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop />
       </div>
     );
   }
@@ -249,9 +306,10 @@ function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlayl
   return (
     <div
       key={`${sig}-${safeIdx}`}
-      className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center sponsor-hold-pop"
-      style={{ backgroundColor: bg, color: fg }}
+      className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center"
+      style={{ backgroundColor: bg, color: fg, ...animationStyle }}
     >
+      <HoldFadeStyle />
       {sponsor.logoDataUrl ? (
         <img
           src={sponsor.logoDataUrl}
@@ -264,25 +322,18 @@ function HoldCarousel({ zone, entries }: { zone: LedZone; entries: ResolvedPlayl
       <div className="font-black uppercase leading-tight tracking-tight" style={{ fontSize }}>
         {sponsor.label}
       </div>
-      <style>{`
-        @keyframes sponsor-hold-pop {
-          from { opacity: 0; transform: scale(0.985); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .sponsor-hold-pop {
-          animation: sponsor-hold-pop 0.5s ease-out;
-        }
-      `}</style>
     </div>
   );
 }
 
-function SponsorOverlayLabel({ sponsor }: { sponsor: Sponsor }) {
+function HoldFadeStyle() {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-2">
-      <div className="truncate text-center text-sm font-semibold uppercase tracking-wide text-white/90">
-        {sponsor.label}
-      </div>
-    </div>
+    <style>{`
+      @keyframes sponsor-hold-fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+    `}</style>
   );
 }
+

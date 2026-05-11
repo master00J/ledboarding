@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_ARENACUE_FEED_URL?: string;
+  readonly VITE_ARENACUE_AI_BASE_URL?: string;
 }
 
 type TextureFitMode = "cover" | "contain";
@@ -33,46 +34,38 @@ type TextureExportResult =
   | { ok: true; filePath: string }
   | { ok: false; error: string; canceled?: boolean };
 
-type TextureQuickExportPayloadForWindow = {
-  build: TextureBuildPayloadForWindow;
-  outputDirectory: string;
-  fileName?: string;
-  revealInFolder?: boolean;
+type OutputOpenOptionsForWindow = {
+  displayId?: number | null;
+  fullscreen?: boolean;
 };
 
-type TextureQuickExportResult =
-  | { ok: true; filePath: string }
-  | { ok: false; error: string };
-
-type TextureBatchExportPayloadForWindow = {
-  build: TextureBuildPayloadForWindow;
-  inputPaths: string[];
-  outputDirectory: string;
-  filenameTemplateRendered?: string[];
+type LedDisplayInfoForWindow = {
+  id: number;
+  label: string;
+  bounds: { x: number; y: number; width: number; height: number };
+  workArea: { x: number; y: number; width: number; height: number };
+  scaleFactor: number;
+  rotation: number;
+  isPrimary: boolean;
 };
 
-type TextureBatchExportResult =
-  | {
-      ok: true;
-      outputDirectory: string;
-      results: Array<{ inputPath: string; ok: boolean; filePath?: string; error?: string }>;
-    }
-  | { ok: false; error: string };
+type ImportedMediaFileForWindow = {
+  path: string;
+  title: string;
+  kind: "image" | "video";
+};
 
 interface LedboardingDesktopApi {
-  openOutput(zoneId: string): Promise<boolean>;
+  openOutput(zoneId: string, options?: OutputOpenOptionsForWindow): Promise<boolean>;
   focusOutput(zoneId: string): Promise<boolean>;
   closeOutput(zoneId: string): Promise<boolean>;
   listOutputWindows(): Promise<string[]>;
+  listDisplays(): Promise<LedDisplayInfoForWindow[]>;
   selectMediaFiles(): Promise<string[]>;
+  importMediaFiles(): Promise<ImportedMediaFileForWindow[]>;
   textureSelectSource(): Promise<string | null>;
-  textureSelectSources(): Promise<string[]>;
-  pickDirectory(defaultPath?: string): Promise<string | null>;
-  openFolder(path: string): Promise<boolean>;
   texturePreview(build: TextureBuildPayloadForWindow): Promise<TexturePreviewResult>;
   textureExportPng(payload: TextureExportPayloadForWindow): Promise<TextureExportResult>;
-  textureQuickExportPng(payload: TextureQuickExportPayloadForWindow): Promise<TextureQuickExportResult>;
-  textureBatchExportPng(payload: TextureBatchExportPayloadForWindow): Promise<TextureBatchExportResult>;
   onOutputWindowsChanged(callback: (zoneIds: string[]) => void): () => void;
 }
 

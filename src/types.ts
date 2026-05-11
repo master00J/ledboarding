@@ -21,6 +21,10 @@ export type LedZone = {
    * Vast segment voor deze zone (t.o.v. tribune vs veld). Null = volgt het globaal actieve segment.
    */
   segmentId?: string | null;
+  /** Naam/label van de fysieke LED-processor of uitgang in de rack-opstelling. */
+  processorName?: string | null;
+  /** Electron/Windows display-id waarop deze zone fullscreen geopend moet worden. */
+  outputDisplayId?: number | null;
   /** Optionele vaste plekken binnen dit output-canvas. Leeg = volledige zone toont één playlist. */
   regions?: LedRegion[];
 };
@@ -36,6 +40,10 @@ export type ContentSettings = {
   playbackMode: PlaybackMode;
   /** Scroll-modus: tijd voor één volledige passage over alle playlist-items (één “ronde”). */
   scrollLoopDurationSec: number;
+  /** Outputhelderheid in procenten. Wordt als CSS-brightness op het LED-canvas toegepast. */
+  brightnessPercent: number;
+  /** Fade-in duur tussen hold/video items. 0 = direct schakelen. */
+  fadeTransitionMs: number;
   /**
    * Als true: poll `VITE_ARENACUE_FEED_URL` en pas het actieve LED-segment toe wanneer de feed een ander segment-id meldt.
    */
@@ -60,6 +68,8 @@ export type Sponsor = {
   mediaTitle: string | null;
   /** Hoe image/video in het LED-canvas past. */
   mediaFit: MediaFit;
+  /** Gewenste schermtijd per wedstrijd in minuten. 0 = geen budgettracking. */
+  targetMinutesPerMatch: number;
 };
 
 export type PlaylistEntry = {
@@ -92,4 +102,41 @@ export type LedContentState = {
 export type ResolvedPlaylistEntry = {
   sponsor: Sponsor;
   durationSec: number;
+};
+
+export type LivePlaybackStatus = "playing" | "paused";
+
+export type LiveOverrideMode = "normal" | "blackout" | "testPattern";
+
+export type LivePlaybackState = {
+  status: LivePlaybackStatus;
+  overrideMode: LiveOverrideMode;
+  /** Huidige positie binnen de effectieve playlist. Wordt per zone tegen de playlistlengte begrensd. */
+  itemIndex: number;
+  /** Moment waarop het huidige item is gestart. */
+  itemStartedAtMs: number;
+  /** Reeds afgespeelde tijd op het huidige item wanneer gepauzeerd. */
+  pausedElapsedMs: number;
+  /** Zones die door de operator als gekoppelde startgroep zijn geselecteerd. */
+  linkedZoneIds: string[];
+  updatedAtMs: number;
+};
+
+export type MatchPlanBlock = {
+  id: string;
+  label: string;
+  /** Minuut op de matchtijdlijn. Mag negatief zijn voor pre-match. */
+  startMinute: number;
+  endMinute: number;
+  segmentId: string;
+};
+
+export type MatchPlanState = {
+  enabled: boolean;
+  running: boolean;
+  startedAtMs: number | null;
+  pausedElapsedMs: number;
+  activeBlockId: string | null;
+  blocks: MatchPlanBlock[];
+  updatedAtMs: number;
 };

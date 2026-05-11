@@ -2,21 +2,45 @@ import { Link } from "react-router-dom";
 import { type ReactNode, useEffect, useMemo, useReducer, useState } from "react";
 import type { LedRegion, LedZone } from "@/types";
 import { loadContent, setActiveSegment } from "@/contentStorage";
+import { saveContent } from "@/contentStorage";
+import {
+  loadLivePlayback,
+  restartLivePlayback,
+  updateLivePlayback,
+} from "@/livePlaybackStorage";
+import { AiSetupSection } from "@/pages/AiSetupSection";
+import { LiveConsoleSection } from "@/pages/LiveConsoleSection";
+import { MatchPlanningSection } from "@/pages/MatchPlanningSection";
+import { PlayoutConsoleSection } from "@/pages/PlayoutConsoleSection";
 import { SetupContentSection } from "@/pages/SetupContentSection";
 import { TextureExportSection } from "@/pages/TextureExportSection";
+import { createLedboardingTestContent, createLedboardingTestZones } from "@/testPreset";
 import { loadZones, saveZones } from "@/zoneStorage";
+import { effectivePlayback, resolveActivePlaylist } from "@/playlistResolve";
+import { addSponsorPlayedSeconds } from "@/sponsorBudgetLedger";
 
 function randomId(): string {
   return `z_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-type SetupTab = "dashboard" | "zones" | "texture" | "content" | "playlists" | "backup";
+type SetupTab =
+  | "playout"
+  | "ai"
+  | "live"
+  | "match"
+  | "dashboard"
+  | "zones"
+  | "texture"
+  | "content"
+  | "playlists"
+  | "backup";
 
 export function SetupPage() {
-  const [tab, setTab] = useState<SetupTab>("dashboard");
+  const [tab, setTab] = useState<SetupTab>("playout");
   const [zones, setZones] = useState<LedZone[]>(() => loadZones());
   const [segTick, bumpSeg] = useReducer((n: number) => n + 1, 0);
   const [openOutputs, setOpenOutputs] = useState<string[]>([]);
+  const [displays, setDisplays] = useState<LedDisplayInfoForWindow[]>([]);
 
   useEffect(() => {
     function onContentChange() {
@@ -31,9 +55,40 @@ export function SetupPage() {
   const activeSegment = boardSegments.find((s) => s.id === boardContent.activeSegmentId) ?? boardSegments[0];
 
   useEffect(() => {
+    const primaryZone = zones.find((z) => !z.segmentId?.trim()) ?? zones[0] ?? null;
+    const entries = resolveActivePlaylist(boardContent, primaryZone);
+    if (entries.length === 0) return;
+    const playback = effectivePlayback(boardContent, primaryZone);
+    const containsVideo = entries.some((entry) => entry.sponsor.contentKind === "video" && entry.sponsor.mediaSrc);
+    if (playback.mode !== "hold" && !containsVideo) return;
+
+    const live = loadLivePlayback();
+    if (live.status !== "playing" || live.overrideMode !== "normal") return;
+    const safe = live.itemIndex % entries.length;
+    const elapsed = Math.max(0, Date.now() - live.itemStartedAtMs);
+    const ms = Math.max(2000, (entries[safe]?.durationSec ?? 8) * 1000);
+    const tid = window.setTimeout(() => {
+      const current = entries[safe];
+      if (current) addSponsorPlayedSeconds(current.sponsor.id, current.durationSec);
+      updateLivePlayback((state) => ({
+        ...state,
+        status: "playing",
+        itemIndex: (safe + 1) % entries.length,
+        itemStartedAtMs: Date.now(),
+        pausedElapsedMs: 0,
+        updatedAtMs: Date.now(),
+      }));
+    }, Math.max(250, ms - elapsed));
+    return () => window.clearTimeout(tid);
+  }, [boardContent, zones, segTick]);
+
+  useEffect(() => {
     let cancelled = false;
     void window.ledboarding?.listOutputWindows().then((ids) => {
       if (!cancelled) setOpenOutputs(ids);
+    });
+    void window.ledboarding?.listDisplays().then((items) => {
+      if (!cancelled) setDisplays(items);
     });
     const unsubscribe = window.ledboarding?.onOutputWindowsChanged(setOpenOutputs);
     return () => {
@@ -65,12 +120,28 @@ export function SetupPage() {
         name: `Zone ${prev.length + 1}`,
         widthPx: 1920,
         heightPx: 256,
+        processorName: `Processor ${prev.length + 1}`,
+        outputDisplayId: null,
       },
     ]);
   }
 
   function removeZone(id: string) {
     setZones((prev) => (prev.length <= 1 ? prev : prev.filter((z) => z.id !== id)));
+  }
+
+  function loadTestSetup() {
+    const ok = window.confirm(
+      "Testopstelling laden vervangt de huidige zones, sponsors en playlists door de lokale LED visuals. Doorgaan?",
+    );
+    if (!ok) return;
+    const nextZones = createLedboardingTestZones();
+    saveContent(createLedboardingTestContent());
+    setZones(nextZones);
+    saveZones(nextZones);
+    restartLivePlayback(0);
+    bumpSeg();
+    setTab("live");
   }
 
   function addRegion(zone: LedZone) {
@@ -101,8 +172,12 @@ export function SetupPage() {
   }
 
   async function openOutput(zoneId: string) {
+    const zone = zones.find((z) => z.id === zoneId);
     if (window.ledboarding) {
-      await window.ledboarding.openOutput(zoneId);
+      await window.ledboarding.openOutput(zoneId, {
+        displayId: zone?.outputDisplayId ?? null,
+        fullscreen: true,
+      });
       setOpenOutputs(await window.ledboarding.listOutputWindows());
       return;
     }
@@ -129,6 +204,18 @@ export function SetupPage() {
       </header>
 
       <nav className="mb-8 flex flex-wrap gap-2 border-b border-zinc-800 pb-px">
+        <TabButton active={tab === "playout"} onClick={() => setTab("playout")}>
+          Playout Console
+        </TabButton>
+        <TabButton active={tab === "ai"} onClick={() => setTab("ai")}>
+          AI setup
+        </TabButton>
+        <TabButton active={tab === "live"} onClick={() => setTab("live")}>
+          Live Console
+        </TabButton>
+        <TabButton active={tab === "match"} onClick={() => setTab("match")}>
+          Match Planning
+        </TabButton>
         <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")}>
           Dashboard
         </TabButton>
@@ -149,6 +236,11 @@ export function SetupPage() {
         </TabButton>
       </nav>
 
+      {tab === "playout" && <PlayoutConsoleSection />}
+      {tab === "ai" && <AiSetupSection />}
+      {tab === "live" && <LiveConsoleSection />}
+      {tab === "match" && <MatchPlanningSection />}
+
       {tab === "dashboard" && (
         <div className="space-y-6">
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
@@ -168,6 +260,7 @@ export function SetupPage() {
                   value={activeSegment?.id ?? ""}
                   onChange={(e) => {
                     setActiveSegment(e.target.value);
+                    restartLivePlayback(0);
                     bumpSeg();
                   }}
                 >
@@ -284,6 +377,13 @@ export function SetupPage() {
             >
               Zone toevoegen
             </button>
+            <button
+              type="button"
+              onClick={loadTestSetup}
+              className="rounded-lg border border-amber-600/70 bg-amber-950/30 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-900/40"
+            >
+              Laad volledige testopstelling
+            </button>
           </div>
 
           <ul className="space-y-4">
@@ -372,6 +472,46 @@ export function SetupPage() {
             <p className="mt-3 font-mono text-xs text-zinc-500">
               {z.widthPx} × {z.heightPx} px
             </p>
+            <div className="mt-4 grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1.2fr)]">
+              <label>
+                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Processor / uitgang
+                </span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  value={z.processorName ?? ""}
+                  placeholder="Bijv. Midtier main, Scoreboard backup"
+                  onChange={(e) => update(z.id, { processorName: e.target.value })}
+                />
+              </label>
+              <label>
+                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Windows-scherm / processor input
+                </span>
+                <select
+                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  value={z.outputDisplayId ?? ""}
+                  onChange={(e) =>
+                    update(z.id, {
+                      outputDisplayId: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                  disabled={!window.ledboarding || displays.length === 0}
+                >
+                  <option value="">
+                    {window.ledboarding ? "Niet gekoppeld: open op hoofdscherm" : "Alleen beschikbaar in desktop-app"}
+                  </option>
+                  {displays.map((display) => (
+                    <option key={display.id} value={display.id}>
+                      {formatDisplay(display)}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] text-zinc-600">
+                  Koppel dit aan de HDMI/DP-output die naar de juiste LED-processor gaat.
+                </span>
+              </label>
+            </div>
             <div className="mt-5 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -489,6 +629,11 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatDisplay(display: LedDisplayInfoForWindow): string {
+  const primary = display.isPrimary ? " · hoofdscherm" : "";
+  return `${display.label} · ${display.bounds.width}×${display.bounds.height} @ ${display.bounds.x},${display.bounds.y}${primary}`;
+}
+
 function NumberField({
   label,
   value,
@@ -546,6 +691,14 @@ function clampZone(z: LedZone): LedZone {
     z.segmentId === undefined || z.segmentId === null || String(z.segmentId).trim() === ""
       ? null
       : String(z.segmentId).trim().slice(0, 128);
+  const processorName =
+    z.processorName === undefined || z.processorName === null || String(z.processorName).trim() === ""
+      ? null
+      : String(z.processorName).trim().slice(0, 160);
+  const outputDisplayId =
+    typeof z.outputDisplayId === "number" && Number.isFinite(z.outputDisplayId)
+      ? Math.round(z.outputDisplayId)
+      : null;
   const widthPx = Math.min(32768, Math.max(64, Math.round(z.widthPx)));
   const heightPx = Math.min(8192, Math.max(32, Math.round(z.heightPx)));
   return {
@@ -554,6 +707,8 @@ function clampZone(z: LedZone): LedZone {
     heightPx,
     name: z.name.trim() || "Zone",
     segmentId,
+    processorName,
+    outputDisplayId,
     regions: (z.regions ?? []).map((r) => clampRegion(r, widthPx, heightPx)),
   };
 }

@@ -13,6 +13,8 @@ export function defaultZones(): LedZone[] {
       name: "Veld perimeter",
       widthPx: 4992,
       heightPx: 320,
+      processorName: "Processor 1",
+      outputDisplayId: null,
       regions: [],
     },
   ];
@@ -56,6 +58,14 @@ function normalizeZone(x: unknown): LedZone | null {
     o.segmentId === undefined ||
     o.segmentId === null ||
     (typeof o.segmentId === "string" && o.segmentId.length <= 128);
+  const processorOk =
+    o.processorName === undefined ||
+    o.processorName === null ||
+    (typeof o.processorName === "string" && o.processorName.length <= 160);
+  const outputDisplayOk =
+    o.outputDisplayId === undefined ||
+    o.outputDisplayId === null ||
+    (typeof o.outputDisplayId === "number" && Number.isFinite(o.outputDisplayId));
   const valid =
     typeof o.id === "string" &&
     typeof o.name === "string" &&
@@ -65,7 +75,9 @@ function normalizeZone(x: unknown): LedZone | null {
     o.widthPx <= 32768 &&
     o.heightPx >= 32 &&
     o.heightPx <= 8192 &&
-    segmentOk;
+    segmentOk &&
+    processorOk &&
+    outputDisplayOk;
   if (!valid) return null;
   const id = o.id as string;
   const name = o.name as string;
@@ -82,6 +94,14 @@ function normalizeZone(x: unknown): LedZone | null {
     heightPx,
     segmentId:
       typeof o.segmentId === "string" && o.segmentId.trim().length > 0 ? o.segmentId.trim() : null,
+    processorName:
+      typeof o.processorName === "string" && o.processorName.trim().length > 0
+        ? o.processorName.trim().slice(0, 160)
+        : null,
+    outputDisplayId:
+      typeof o.outputDisplayId === "number" && Number.isFinite(o.outputDisplayId)
+        ? Math.round(o.outputDisplayId)
+        : null,
     regions,
   };
 }
