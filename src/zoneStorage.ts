@@ -2,22 +2,8 @@ import type { LedRegion, LedZone } from "@/types";
 
 const STORAGE_KEY = "ledboarding.zones.v1";
 
-function randomId(): string {
-  return `z_${Math.random().toString(36).slice(2, 11)}`;
-}
-
 export function defaultZones(): LedZone[] {
-  return [
-    {
-      id: randomId(),
-      name: "Veld perimeter",
-      widthPx: 4992,
-      heightPx: 320,
-      processorName: "Processor 1",
-      outputDisplayId: null,
-      regions: [],
-    },
-  ];
+  return [];
 }
 
 export function loadZones(): LedZone[] {
@@ -29,9 +15,9 @@ export function loadZones(): LedZone[] {
       return initial;
     }
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed) || parsed.length === 0) return defaultZones();
+    if (!Array.isArray(parsed)) return defaultZones();
     const zones = parsed.map(normalizeZone).filter(Boolean) as LedZone[];
-    return zones.length > 0 ? zones : defaultZones();
+    return zones;
   } catch {
     return defaultZones();
   }

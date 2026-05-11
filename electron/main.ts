@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from "electron";
 import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
 import path from "node:path";
@@ -54,6 +54,7 @@ function createWindow(): BrowserWindow {
     minHeight: 480,
     title: "ArenaCue LED boarding",
     icon: windowIconPath(),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -174,7 +175,9 @@ function createOutputWindow(zoneId: string, options?: OutputOpenOptions): Browse
     minHeight: 160,
     title: `ArenaCue LED output · ${zoneId}`,
     icon: windowIconPath(),
+    autoHideMenuBar: true,
     backgroundColor: "#000000",
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -377,6 +380,7 @@ ipcMain.handle(
 );
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   createWindow();
 
   app.on("activate", () => {

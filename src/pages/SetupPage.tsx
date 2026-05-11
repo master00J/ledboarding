@@ -1,21 +1,21 @@
-import { Link } from "react-router-dom";
 import { type ReactNode, useEffect, useMemo, useReducer, useState } from "react";
 import type { LedRegion, LedZone } from "@/types";
-import { loadContent, setActiveSegment } from "@/contentStorage";
+import { defaultContent, loadContent, setActiveSegment } from "@/contentStorage";
 import { saveContent } from "@/contentStorage";
 import {
+  clearLiveCue,
   loadLivePlayback,
   restartLivePlayback,
   updateLivePlayback,
 } from "@/livePlaybackStorage";
+import { liveCueTiming, resolveLiveCue } from "@/liveCueResolve";
 import { AiSetupSection } from "@/pages/AiSetupSection";
 import { LiveConsoleSection } from "@/pages/LiveConsoleSection";
 import { MatchPlanningSection } from "@/pages/MatchPlanningSection";
 import { PlayoutConsoleSection } from "@/pages/PlayoutConsoleSection";
 import { SetupContentSection } from "@/pages/SetupContentSection";
 import { TextureExportSection } from "@/pages/TextureExportSection";
-import { createLedboardingTestContent, createLedboardingTestZones } from "@/testPreset";
-import { loadZones, saveZones } from "@/zoneStorage";
+import { defaultZones, loadZones, saveZones } from "@/zoneStorage";
 import { effectivePlayback, resolveActivePlaylist } from "@/playlistResolve";
 import { addSponsorPlayedSeconds } from "@/sponsorBudgetLedger";
 
@@ -56,14 +56,36 @@ export function SetupPage() {
 
   useEffect(() => {
     const primaryZone = zones.find((z) => !z.segmentId?.trim()) ?? zones[0] ?? null;
+    const live = loadLivePlayback();
+    if (live.status !== "playing" || live.overrideMode !== "normal") return;
+
+    const cue = resolveLiveCue(boardContent, live);
+    const cueTiming = liveCueTiming(live);
+    if (cueTiming) {
+      const finishCue = () => {
+        const latest = loadLivePlayback();
+        const latestCue = resolveLiveCue(boardContent, latest);
+        if (latestCue && latest.activeCue?.id === cueTiming.cue.id) {
+          addSponsorPlayedSeconds(latestCue.sponsor.id, latestCue.cue.durationSec);
+        }
+        clearLiveCue();
+      };
+
+      if (cueTiming.expired || !cue) {
+        finishCue();
+        return;
+      }
+
+      const tid = window.setTimeout(finishCue, Math.max(250, cueTiming.remainingMs));
+      return () => window.clearTimeout(tid);
+    }
+
     const entries = resolveActivePlaylist(boardContent, primaryZone);
     if (entries.length === 0) return;
     const playback = effectivePlayback(boardContent, primaryZone);
     const containsVideo = entries.some((entry) => entry.sponsor.contentKind === "video" && entry.sponsor.mediaSrc);
     if (playback.mode !== "hold" && !containsVideo) return;
 
-    const live = loadLivePlayback();
-    if (live.status !== "playing" || live.overrideMode !== "normal") return;
     const safe = live.itemIndex % entries.length;
     const elapsed = Math.max(0, Date.now() - live.itemStartedAtMs);
     const ms = Math.max(2000, (entries[safe]?.durationSec ?? 8) * 1000);
@@ -120,28 +142,28 @@ export function SetupPage() {
         name: `Zone ${prev.length + 1}`,
         widthPx: 1920,
         heightPx: 256,
-        processorName: `Processor ${prev.length + 1}`,
+        processorName: null,
         outputDisplayId: null,
       },
     ]);
   }
 
   function removeZone(id: string) {
-    setZones((prev) => (prev.length <= 1 ? prev : prev.filter((z) => z.id !== id)));
+    setZones((prev) => prev.filter((z) => z.id !== id));
   }
 
-  function loadTestSetup() {
+  function loadEmptySetup() {
     const ok = window.confirm(
-      "Testopstelling laden vervangt de huidige zones, sponsors en playlists door de lokale LED visuals. Doorgaan?",
+      "Lege setup laden vervangt de huidige zones, sponsors en playlists. Doorgaan?",
     );
     if (!ok) return;
-    const nextZones = createLedboardingTestZones();
-    saveContent(createLedboardingTestContent());
+    const nextZones = defaultZones();
+    saveContent(defaultContent());
     setZones(nextZones);
     saveZones(nextZones);
     restartLivePlayback(0);
     bumpSeg();
-    setTab("live");
+    setTab("zones");
   }
 
   function addRegion(zone: LedZone) {
@@ -195,15 +217,22 @@ export function SetupPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <header className="mb-8">
+    <div className="min-h-screen w-full max-w-none px-3 py-4 xl:px-6 2xl:px-8">
+      <header className="mb-5">
         <h1 className="text-2xl font-semibold tracking-tight text-white">ArenaCue LED boarding</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-          Eén control panel voor zones, outputvensters, content en playlists.
+          Eén control panel voor zones, outputvensters, content, playlists en wedstrijdmomenten.
         </p>
       </header>
 
-      <nav className="mb-8 flex flex-wrap gap-2 border-b border-zinc-800 pb-px">
+      <section className="mb-5 grid gap-3 md:grid-cols-4">
+        <SetupStepCard step="1" title="Content" text="Importeer sponsorbeelden, video's of tekstitems." />
+        <SetupStepCard step="2" title="Playlists" text="Verdeel content over segmenten zoals live, rust of goal." />
+        <SetupStepCard step="3" title="Zones" text="Koppel LED-resoluties aan schermen en segmenten." />
+        <SetupStepCard step="4" title="Live" text="Open outputs en start tijdelijke cues tijdens de wedstrijd." />
+      </section>
+
+      <nav className="mb-5 flex flex-wrap gap-2 border-b border-zinc-800 pb-px">
         <TabButton active={tab === "playout"} onClick={() => setTab("playout")}>
           Playout Console
         </TabButton>
@@ -379,15 +408,15 @@ export function SetupPage() {
             </button>
             <button
               type="button"
-              onClick={loadTestSetup}
-              className="rounded-lg border border-amber-600/70 bg-amber-950/30 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-900/40"
+              onClick={loadEmptySetup}
+              className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800"
             >
-              Laad volledige testopstelling
+              Start lege setup
             </button>
           </div>
 
           <ul className="space-y-4">
-        {sorted.map((z) => (
+        {zones.map((z) => (
           <li
             key={z.id}
             className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-inner"
@@ -401,47 +430,36 @@ export function SetupPage() {
                   onChange={(e) => update(z.id, { name: e.target.value })}
                 />
               </label>
-              <label className="w-28">
-                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Breedte</span>
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  value={z.widthPx}
-                  min={64}
-                  max={32768}
-                  onChange={(e) => update(z.id, { widthPx: Number(e.target.value) })}
-                />
-              </label>
-              <label className="w-28">
-                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Hoogte</span>
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  value={z.heightPx}
-                  min={32}
-                  max={8192}
-                  onChange={(e) => update(z.id, { heightPx: Number(e.target.value) })}
-                />
-              </label>
+              <NumberField
+                label="Breedte"
+                value={z.widthPx}
+                min={64}
+                max={32768}
+                step={10}
+                className="w-40"
+                onChange={(value) => update(z.id, { widthPx: value })}
+              />
+              <NumberField
+                label="Hoogte"
+                value={z.heightPx}
+                min={32}
+                max={8192}
+                step={10}
+                className="w-40"
+                onChange={(value) => update(z.id, { heightPx: value })}
+              />
               <div className="flex flex-wrap gap-2 pb-0.5">
-                <Link
-                  to={`/display/${z.id}`}
-                  className="rounded-lg border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800"
-                >
-                  Output openen
-                </Link>
                 <button
                   type="button"
                   onClick={() => void openOutput(z.id)}
                   className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
                 >
-                  Electron output
+                  Output openen
                 </button>
                 <button
                   type="button"
                   onClick={() => removeZone(z.id)}
-                  disabled={zones.length <= 1}
-                  className="rounded-lg border border-red-900/60 px-3 py-2 text-sm text-red-300 hover:bg-red-950/40 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg border border-red-900/60 px-3 py-2 text-sm text-red-300 hover:bg-red-950/40"
                 >
                   Verwijderen
                 </button>
@@ -534,7 +552,7 @@ export function SetupPage() {
                   {z.regions!.map((region) => (
                     <div
                       key={region.id}
-                      className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 lg:grid-cols-[minmax(160px,1fr)_repeat(4,5.5rem)_minmax(180px,1fr)_auto]"
+                      className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 lg:grid-cols-[minmax(180px,1fr)_repeat(4,minmax(7rem,8rem))_minmax(200px,1fr)_auto]"
                     >
                       <label>
                         <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
@@ -551,6 +569,7 @@ export function SetupPage() {
                         value={region.xPx}
                         min={0}
                         max={z.widthPx}
+                        step={10}
                         onChange={(value) => updateRegion(z, region.id, { xPx: value })}
                       />
                       <NumberField
@@ -558,6 +577,7 @@ export function SetupPage() {
                         value={region.yPx}
                         min={0}
                         max={z.heightPx}
+                        step={10}
                         onChange={(value) => updateRegion(z, region.id, { yPx: value })}
                       />
                       <NumberField
@@ -565,6 +585,7 @@ export function SetupPage() {
                         value={region.widthPx}
                         min={1}
                         max={z.widthPx}
+                        step={10}
                         onChange={(value) => updateRegion(z, region.id, { widthPx: value })}
                       />
                       <NumberField
@@ -572,6 +593,7 @@ export function SetupPage() {
                         value={region.heightPx}
                         min={1}
                         max={z.heightPx}
+                        step={10}
                         onChange={(value) => updateRegion(z, region.id, { heightPx: value })}
                       />
                       <label>
@@ -629,6 +651,18 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SetupStepCard({ step, title, text }: { step: string; title: string; text: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-400">
+        Stap {step}
+      </div>
+      <div className="mt-1 font-semibold text-white">{title}</div>
+      <p className="mt-1 text-xs leading-relaxed text-zinc-500">{text}</p>
+    </div>
+  );
+}
+
 function formatDisplay(display: LedDisplayInfoForWindow): string {
   const primary = display.isPrimary ? " · hoofdscherm" : "";
   return `${display.label} · ${display.bounds.width}×${display.bounds.height} @ ${display.bounds.x},${display.bounds.y}${primary}`;
@@ -639,25 +673,74 @@ function NumberField({
   value,
   min,
   max,
+  step = 1,
+  className = "",
   onChange,
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
+  step?: number;
+  className?: string;
   onChange: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  function commit(nextValue = draft) {
+    const n = Number(nextValue);
+    if (!Number.isFinite(n)) {
+      setDraft(String(value));
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, Math.round(n)));
+    setDraft(String(clamped));
+    if (clamped !== value) onChange(clamped);
+  }
+
+  function bump(delta: number) {
+    const base = Number(draft);
+    const next = (Number.isFinite(base) ? base : value) + delta;
+    commit(String(next));
+  }
+
   return (
-    <label>
+    <label className={className}>
       <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/50"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
+      <div className="mt-1 flex overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 focus-within:ring-2 focus-within:ring-emerald-500/50">
+        <button
+          type="button"
+          onClick={() => bump(-step)}
+          className="shrink-0 border-r border-zinc-800 px-2 text-xs font-black text-zinc-400 hover:bg-zinc-800 hover:text-white"
+        >
+          -
+        </button>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          className="min-w-0 flex-1 bg-transparent px-2 py-2 text-xs tabular-nums outline-none"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => commit()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => bump(step)}
+          className="shrink-0 border-l border-zinc-800 px-2 text-xs font-black text-zinc-400 hover:bg-zinc-800 hover:text-white"
+        >
+          +
+        </button>
+      </div>
     </label>
   );
 }
@@ -705,7 +788,7 @@ function clampZone(z: LedZone): LedZone {
     ...z,
     widthPx,
     heightPx,
-    name: z.name.trim() || "Zone",
+    name: z.name.slice(0, 160),
     segmentId,
     processorName,
     outputDisplayId,
@@ -724,7 +807,7 @@ function clampRegion(region: LedRegion, zoneW: number, zoneH: number): LedRegion
       : String(region.segmentId).trim().slice(0, 128);
   return {
     ...region,
-    name: region.name.trim() || "Subzone",
+    name: region.name.slice(0, 160),
     xPx,
     yPx,
     widthPx,

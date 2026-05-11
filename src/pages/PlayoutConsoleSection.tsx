@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useReducer, useState } from "react";
+import { LiveCuePanel } from "@/components/LiveCuePanel";
 import { loadContent, saveContent, setActiveSegment } from "@/contentStorage";
 import {
   LIVE_PLAYBACK_EVENT,
@@ -10,6 +11,7 @@ import {
   setLiveOverrideMode,
   updateLivePlayback,
 } from "@/livePlaybackStorage";
+import { resolveLiveCue } from "@/liveCueResolve";
 import {
   effectivePlayback,
   effectiveSegmentId,
@@ -96,6 +98,13 @@ export function PlayoutConsoleSection() {
   const durationMs = Math.max(1, (current?.durationSec ?? 0) * 1000);
   const remainingMs = Math.max(0, durationMs - elapsedMs);
   const progress = current ? Math.min(100, (elapsedMs / durationMs) * 100) : 0;
+  const activeCue = useMemo(() => resolveLiveCue(content, live, clock), [content, live, clock]);
+  const visibleCurrent = activeCue?.entry ?? current;
+  const visibleNext = activeCue ? current : next;
+  const visibleElapsedMs = activeCue?.elapsedMs ?? elapsedMs;
+  const visibleRemainingMs = activeCue?.remainingMs ?? remainingMs;
+  const visibleDurationSec = activeCue?.entry.durationSec ?? current?.durationSec ?? 0;
+  const visibleProgress = activeCue?.progress ?? progress;
 
   useEffect(() => {
     if (!selectedZoneId && zones[0]) {
@@ -145,6 +154,7 @@ export function PlayoutConsoleSection() {
     updateLivePlayback((state) => ({
       ...state,
       status: "playing",
+      activeCue: null,
       itemIndex: index,
       itemStartedAtMs: Date.now(),
       pausedElapsedMs: 0,
@@ -182,10 +192,10 @@ export function PlayoutConsoleSection() {
   }
 
   return (
-    <div className="space-y-4 overflow-hidden">
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
-        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.9fr)_minmax(300px,0.65fr)]">
-          <div className="grid min-w-0 gap-3 xl:grid-cols-2">
+    <div className="w-full space-y-4 overflow-x-auto">
+      <section className="min-w-[1320px] rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(620px,1.65fr)_minmax(390px,0.8fr)_minmax(320px,0.65fr)]">
+          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
             <PlaylistPanel
               title="Perimeter playlist"
               zone={selectedZone}
@@ -214,9 +224,15 @@ export function PlayoutConsoleSection() {
                 Player
               </p>
               <h2 className="mt-2 truncate text-3xl font-black text-white">
-                {current?.sponsor.label ?? "Geen actief item"}
+                {visibleCurrent?.sponsor.label ?? "Geen actief item"}
               </h2>
               <p className="mt-2 min-w-0 text-sm text-zinc-400">
+                {activeCue ? (
+                  <>
+                    Cue: <strong className="text-emerald-300">{activeCue.cue.label}</strong>
+                    {" · "}
+                  </>
+                ) : null}
                 Segment: <strong className="inline-block max-w-full align-bottom text-zinc-200">{segmentLabel(content, selectedZone)}</strong>
                 {" · "}
                 Modus: <strong className="text-zinc-200">{playback.mode === "hold" ? "Vast" : "Scroll"}</strong>
@@ -227,16 +243,16 @@ export function PlayoutConsoleSection() {
               </p>
 
               <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-3">
-                <PlayerCard title="Nu" entry={current} />
-                <PlayerCard title="Volgende" entry={next} />
+                <PlayerCard title={activeCue ? "Cue live" : "Nu"} entry={visibleCurrent} />
+                <PlayerCard title={activeCue ? "Na cue" : "Volgende"} entry={visibleNext} />
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Timer</div>
-                  <div className="mt-3 truncate font-mono text-2xl font-black text-white lg:text-3xl">{formatClock(remainingMs)}</div>
+                  <div className="mt-3 truncate font-mono text-2xl font-black text-white lg:text-3xl">{formatClock(visibleRemainingMs)}</div>
                   <div className="mt-1 truncate text-xs text-zinc-500">
-                    {formatClock(elapsedMs)} van {current ? `${current.durationSec}s` : "0s"}
+                    {formatClock(visibleElapsedMs)} van {visibleDurationSec ? `${visibleDurationSec}s` : "0s"}
                   </div>
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-800">
-                    <div className="h-full bg-emerald-500" style={{ width: `${progress}%` }} />
+                    <div className="h-full bg-emerald-500" style={{ width: `${visibleProgress}%` }} />
                   </div>
                 </div>
               </div>
@@ -293,6 +309,8 @@ export function PlayoutConsoleSection() {
           </div>
 
           <div className="min-w-0 space-y-4">
+            <LiveCuePanel content={content} live={live} nowMs={clock} compact onChange={bump} />
+
             <div className="grid grid-cols-2 gap-2">
               <ActionButton tone="red" onClick={() => setOverride("blackout")}>
                 {live.overrideMode === "blackout" ? "Blackout uit" : "Blackout"}

@@ -79,7 +79,7 @@ function applyOneAction(action: LedAiAction, content: LedContentState, zones: Le
       name,
       widthPx,
       heightPx,
-      processorName: readString(p.processorName, 160) ?? `Processor ${zones.length + 1}`,
+      processorName: readString(p.processorName, 160),
       outputDisplayId: readOptionalNumber(p.outputDisplayId, 0, 100),
       segmentId,
       regions: [],

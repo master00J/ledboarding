@@ -45,47 +45,8 @@ export function createDefaultSegments(playlist: PlaylistEntry[]): PlaylistSegmen
 }
 
 export function defaultContent(): LedContentState {
-  const s1: Sponsor = {
-    id: rid("s"),
-    label: "ArenaCue LED",
-    bgColor: "#064e3b",
-    textColor: "#ecfdf5",
-    logoDataUrl: null,
-    contentKind: "text",
-    mediaSrc: null,
-    mediaTitle: null,
-    mediaFit: "contain",
-    targetMinutesPerMatch: 0,
-  };
-  const s2: Sponsor = {
-    id: rid("s"),
-    label: "Sound & Vision",
-    bgColor: "#3f3f46",
-    textColor: "#fafafa",
-    logoDataUrl: null,
-    contentKind: "text",
-    mediaSrc: null,
-    mediaTitle: null,
-    mediaFit: "contain",
-    targetMinutesPerMatch: 0,
-  };
-  const s3: Sponsor = {
-    id: rid("s"),
-    label: "Welkom in het stadion",
-    bgColor: "#1e3a8a",
-    textColor: "#eff6ff",
-    logoDataUrl: null,
-    contentKind: "text",
-    mediaSrc: null,
-    mediaTitle: null,
-    mediaFit: "contain",
-    targetMinutesPerMatch: 0,
-  };
-  const sponsors = [s1, s2, s3];
-  const playlist: PlaylistEntry[] = sponsors.map((s) => ({
-    sponsorId: s.id,
-    durationSec: 10,
-  }));
+  const sponsors: Sponsor[] = [];
+  const playlist: PlaylistEntry[] = [];
   return {
     settings: {
       playbackMode: "scroll",
@@ -147,9 +108,10 @@ function normalizeContent(raw: unknown): LedContentState {
       ? normalizeSettings(o.settings as Record<string, unknown>)
       : base.settings;
 
-  const sponsorsRaw = Array.isArray(o.sponsors) ? o.sponsors : [];
+  const hasSponsorsArray = Array.isArray(o.sponsors);
+  const sponsorsRaw = hasSponsorsArray ? (o.sponsors as unknown[]) : [];
   const sponsors = sponsorsRaw.map(normalizeSponsor).filter(Boolean) as Sponsor[];
-  const mergedSponsors = sponsors.length > 0 ? sponsors : base.sponsors;
+  const mergedSponsors = hasSponsorsArray ? sponsors : base.sponsors;
   const sponsorIds = new Set(mergedSponsors.map((s) => s.id));
 
   let segments: PlaylistSegment[] = [];
@@ -166,9 +128,7 @@ function normalizeContent(raw: unknown): LedContentState {
       filteredLegacy.length > 0
         ? filteredLegacy
         : mergedSponsors.map((s) => ({ sponsorId: s.id, durationSec: 10 }));
-    segments = createDefaultSegments(
-      filler.length > 0 ? filler : [{ sponsorId: mergedSponsors[0]!.id, durationSec: 10 }],
-    );
+    segments = createDefaultSegments(filler);
   }
 
   segments = ensureCoreSegments(segments, mergedSponsors);

@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useReducer, useState } from "react";
+import { LiveCuePanel } from "@/components/LiveCuePanel";
 import { loadContent, saveContent, setActiveSegment } from "@/contentStorage";
 import {
   LIVE_PLAYBACK_EVENT,
@@ -17,6 +18,7 @@ import {
   matchElapsedMs,
   saveMatchPlan,
 } from "@/matchPlanStorage";
+import { resolveLiveCue } from "@/liveCueResolve";
 import { effectivePlayback, resolveActivePlaylist, segmentsForShortcuts } from "@/playlistResolve";
 import {
   SPONSOR_BUDGET_LEDGER_EVENT,
@@ -92,6 +94,13 @@ export function LiveConsoleSection() {
   const durationMs = Math.max(1, (current?.durationSec ?? 0) * 1000);
   const remainingMs = Math.max(0, durationMs - elapsedMs);
   const progress = current ? Math.min(100, (elapsedMs / durationMs) * 100) : 0;
+  const activeCue = useMemo(() => resolveLiveCue(content, live, clock), [content, live, clock]);
+  const visibleCurrent = activeCue?.entry ?? current;
+  const visibleNext = activeCue ? current : next;
+  const visibleElapsedMs = activeCue?.elapsedMs ?? elapsedMs;
+  const visibleRemainingMs = activeCue?.remainingMs ?? remainingMs;
+  const visibleDurationSec = activeCue?.entry.durationSec ?? current?.durationSec ?? 0;
+  const visibleProgress = activeCue?.progress ?? progress;
   const activeSegment = content.segments.find((s) => s.id === content.activeSegmentId) ?? content.segments[0];
   const linkedCount = live.linkedZoneIds.length;
 
@@ -125,6 +134,7 @@ export function LiveConsoleSection() {
     updateLivePlayback((state) => ({
       ...state,
       status: "playing",
+      activeCue: null,
       itemIndex,
       itemStartedAtMs: Date.now(),
       pausedElapsedMs: 0,
@@ -198,9 +208,15 @@ export function LiveConsoleSection() {
                     ? "BLACKOUT"
                     : live.overrideMode === "testPattern"
                       ? "TESTBEELD"
-                      : current?.sponsor.label ?? "Geen actief item"}
+                      : visibleCurrent?.sponsor.label ?? "Geen actief item"}
                 </h2>
                 <p className="mt-2 text-sm text-zinc-400">
+                  {activeCue ? (
+                    <>
+                      Cue: <strong className="text-emerald-300">{activeCue.cue.label}</strong>
+                      {" · "}
+                    </>
+                  ) : null}
                   Segment: <strong className="text-zinc-200">{activeSegment?.label ?? "Onbekend"}</strong>
                   {" · "}
                   Modus: <strong className="text-zinc-200">{playback.mode === "hold" ? "Vast" : "Scroll"}</strong>
@@ -223,16 +239,16 @@ export function LiveConsoleSection() {
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <NowNextCard title="Nu" entry={current} fallback="Geen playlist actief" />
-              <NowNextCard title="Volgende" entry={next} fallback="Geen volgend item" />
+              <NowNextCard title={activeCue ? "Cue live" : "Nu"} entry={visibleCurrent} fallback="Geen playlist actief" />
+              <NowNextCard title={activeCue ? "Na cue" : "Volgende"} entry={visibleNext} fallback="Geen volgend item" />
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Timer</div>
-                <div className="mt-3 font-mono text-3xl font-black text-white">{formatTime(remainingMs)}</div>
+                <div className="mt-3 font-mono text-3xl font-black text-white">{formatTime(visibleRemainingMs)}</div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  {formatTime(elapsedMs)} verstreken van {current ? `${current.durationSec}s` : "0s"}
+                  {formatTime(visibleElapsedMs)} verstreken van {visibleDurationSec ? `${visibleDurationSec}s` : "0s"}
                 </div>
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-800">
-                  <div className="h-full bg-emerald-500" style={{ width: `${progress}%` }} />
+                  <div className="h-full bg-emerald-500" style={{ width: `${visibleProgress}%` }} />
                 </div>
               </div>
             </div>
@@ -307,6 +323,8 @@ export function LiveConsoleSection() {
             </div>
           </div>
 
+          <div className="space-y-4">
+          <LiveCuePanel content={content} live={live} nowMs={clock} onChange={bump} />
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -339,6 +357,7 @@ export function LiveConsoleSection() {
                 </button>
               ))}
             </div>
+          </div>
           </div>
         </div>
       </section>

@@ -108,9 +108,23 @@ export type LivePlaybackStatus = "playing" | "paused";
 
 export type LiveOverrideMode = "normal" | "blackout" | "testPattern";
 
+export type LiveCueScope = "all";
+
+export type LivePlaybackCue = {
+  id: string;
+  label: string;
+  sponsorId: string;
+  durationSec: number;
+  startedAtMs: number;
+  returnToSegmentId: string | null;
+  scope: LiveCueScope;
+};
+
 export type LivePlaybackState = {
   status: LivePlaybackStatus;
   overrideMode: LiveOverrideMode;
+  /** Tijdelijke wedstrijdcue die bovenop de normale playlist wordt getoond. */
+  activeCue: LivePlaybackCue | null;
   /** Huidige positie binnen de effectieve playlist. Wordt per zone tegen de playlistlengte begrensd. */
   itemIndex: number;
   /** Moment waarop het huidige item is gestart. */

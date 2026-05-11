@@ -17,12 +17,24 @@ export function DisplayPage() {
   const { zoneId } = useParams<{ zoneId: string }>();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [fullError, setFullError] = useState<string | null>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [syncTick, bumpSync] = useReducer((n: number) => n + 1, 0);
 
   const zone = useMemo(() => loadZones().find((z) => z.id === zoneId), [zoneId, syncTick]);
   const boardContent = useMemo(() => loadContent(), [syncTick]);
 
   useArenaCueFeed(boardContent.settings.feedFollowSegment === true);
+
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     function onLocal() {
@@ -33,6 +45,30 @@ export function DisplayPage() {
     return () => {
       window.removeEventListener("ledboarding-update", onLocal);
       window.removeEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+    };
+  }, []);
+
+  useEffect(() => {
+    const observedEl = wrapRef.current;
+    if (!observedEl) return;
+
+    function updateSize() {
+      const el = wrapRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setViewportSize({
+        width: Math.max(0, rect.width),
+        height: Math.max(0, rect.height),
+      });
+    }
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(observedEl);
+    window.addEventListener("resize", updateSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateSize);
     };
   }, []);
 
@@ -127,46 +163,63 @@ export function DisplayPage() {
       : boardContent.activeSegmentId
     : boardContent.activeSegmentId;
   const showOutputControls = !window.ledboarding;
+  const outputScale =
+    viewportSize.width > 0 && viewportSize.height > 0
+      ? Math.max(
+          0.01,
+          Math.min(viewportSize.width / zone.widthPx, viewportSize.height / zone.heightPx),
+        )
+      : 1;
 
   return (
-    <div className="flex min-h-screen flex-col bg-black text-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-black text-white">
       <div
         ref={wrapRef}
-        className="flex min-h-0 flex-1 items-center justify-center bg-black"
+        className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black"
       >
-        <div style={{ filter: `brightness(${Math.max(1, Math.min(100, boardContent.settings.brightnessPercent))}%)` }}>
-        <LedCanvas widthPx={zone.widthPx} heightPx={zone.heightPx}>
-          {zone.regions && zone.regions.length > 0 ? (
-            <div className="relative h-full w-full bg-black">
-              {zone.regions.map((region) => (
-                <div
-                  key={region.id}
-                  className="absolute overflow-hidden bg-black ring-1 ring-white/10"
-                  style={{
-                    left: region.xPx,
-                    top: region.yPx,
-                    width: region.widthPx,
-                    height: region.heightPx,
-                  }}
-                  title={`${region.name} · ${region.widthPx}×${region.heightPx}`}
-                >
-                  <SponsorPlayback
-                    zone={{
-                      id: `${zone.id}:${region.id}`,
-                      name: region.name,
-                      widthPx: region.widthPx,
-                      heightPx: region.heightPx,
-                      segmentId: region.segmentId ?? zone.segmentId ?? null,
-                      regions: [],
-                    }}
-                  />
+        <div style={{ width: zone.widthPx * outputScale, height: zone.heightPx * outputScale }}>
+          <div
+            style={{
+              width: zone.widthPx,
+              height: zone.heightPx,
+              filter: `brightness(${Math.max(1, Math.min(100, boardContent.settings.brightnessPercent))}%)`,
+              transform: `scale(${outputScale})`,
+              transformOrigin: "top left",
+            }}
+          >
+            <LedCanvas widthPx={zone.widthPx} heightPx={zone.heightPx}>
+              {zone.regions && zone.regions.length > 0 ? (
+                <div className="relative h-full w-full bg-black">
+                  {zone.regions.map((region) => (
+                    <div
+                      key={region.id}
+                      className="absolute overflow-hidden bg-black ring-1 ring-white/10"
+                      style={{
+                        left: region.xPx,
+                        top: region.yPx,
+                        width: region.widthPx,
+                        height: region.heightPx,
+                      }}
+                      title={`${region.name} · ${region.widthPx}×${region.heightPx}`}
+                    >
+                      <SponsorPlayback
+                        zone={{
+                          id: `${zone.id}:${region.id}`,
+                          name: region.name,
+                          widthPx: region.widthPx,
+                          heightPx: region.heightPx,
+                          segmentId: region.segmentId ?? zone.segmentId ?? null,
+                          regions: [],
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <SponsorPlayback zone={zone} />
-          )}
-        </LedCanvas>
+              ) : (
+                <SponsorPlayback zone={zone} />
+              )}
+            </LedCanvas>
+          </div>
         </div>
       </div>
 

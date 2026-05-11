@@ -6,6 +6,7 @@ import {
   loadLivePlayback,
   updateLivePlayback,
 } from "@/livePlaybackStorage";
+import { resolveLiveCue } from "@/liveCueResolve";
 import { mediaSourceUrl } from "@/mediaSource";
 import { effectivePlayback, resolveActivePlaylist } from "@/playlistResolve";
 
@@ -33,6 +34,7 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
   const live = useMemo(() => loadLivePlayback(), [tick]);
   const entries = useMemo(() => resolveActivePlaylist(content, zone), [content, zone]);
   const playback = useMemo(() => effectivePlayback(content, zone), [content, zone]);
+  const activeCue = useMemo(() => resolveLiveCue(content, live), [content, live]);
   const fadeTransitionMs = content.settings.fadeTransitionMs;
   const containsVideo = entries.some((entry) => entry.sponsor.contentKind === "video" && entry.sponsor.mediaSrc);
 
@@ -42,6 +44,17 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
 
   if (live.overrideMode === "testPattern") {
     return <TestPatternCanvas zone={zone} />;
+  }
+
+  if (activeCue) {
+    return (
+      <SponsorFullFrame
+        zone={zone}
+        sponsor={activeCue.sponsor}
+        fadeTransitionMs={fadeTransitionMs}
+        animationKey={activeCue.cue.id}
+      />
+    );
   }
 
   if (entries.length === 0) {
@@ -59,6 +72,70 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
       loopDurationSec={playback.scrollLoopDurationSec}
       paused={live.status === "paused"}
     />
+  );
+}
+
+function SponsorFullFrame({
+  zone,
+  sponsor,
+  fadeTransitionMs,
+  animationKey,
+}: {
+  zone: LedZone;
+  sponsor: Sponsor;
+  fadeTransitionMs: number;
+  animationKey: string;
+}) {
+  const fontSize = Math.max(18, Math.round(zone.heightPx * 0.34));
+  const logoMax = Math.round(zone.heightPx * 0.42);
+  const bg = sponsor.bgColor ?? "#0f172a";
+  const fg = sponsor.textColor ?? "#f8fafc";
+  const mediaSrc = mediaSourceUrl(sponsor.mediaSrc);
+  const objectFit = sponsor.mediaFit === "cover" ? "cover" : "contain";
+  const animationStyle =
+    fadeTransitionMs > 0 ? { animation: `sponsor-hold-fade ${fadeTransitionMs}ms ease-out` } : undefined;
+
+  if (sponsor.contentKind === "image" && mediaSrc) {
+    return (
+      <div key={animationKey} className="relative h-full w-full bg-black" style={animationStyle}>
+        <HoldFadeStyle />
+        <MediaFrame src={mediaSrc} kind="image" objectFit={objectFit} />
+      </div>
+    );
+  }
+
+  if (sponsor.contentKind === "video" && mediaSrc) {
+    return (
+      <div key={animationKey} className="relative h-full w-full bg-black" style={animationStyle}>
+        <HoldFadeStyle />
+        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      key={animationKey}
+      className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center"
+      style={{ backgroundColor: bg, color: fg, ...animationStyle }}
+    >
+      <HoldFadeStyle />
+      {sponsor.logoDataUrl ? (
+        <img
+          src={sponsor.logoDataUrl}
+          alt=""
+          className="object-contain"
+          style={{ maxHeight: logoMax, maxWidth: Math.min(zone.widthPx * 0.85, logoMax * 3) }}
+          draggable={false}
+        />
+      ) : null}
+      <div
+        className="line-clamp-2 max-w-full px-4 font-black uppercase leading-tight tracking-wide"
+        style={{ fontSize }}
+      >
+        {sponsor.label}
+      </div>
+    </div>
   );
 }
 

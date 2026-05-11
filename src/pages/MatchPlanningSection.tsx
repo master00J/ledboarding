@@ -95,7 +95,8 @@ export function MatchPlanningSection() {
               Wedstrijd vooraf instellen
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-              Plan per wedstrijdblok welk segment actief moet zijn. De Live Console kan deze planning automatisch volgen.
+              Plan per wedstrijdblok welk segment actief moet zijn. De Live Console kan deze planning automatisch volgen;
+              spontane cues zoals goal of VAR toon je daar tijdelijk bovenop zonder deze planning te wijzigen.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -150,6 +151,7 @@ export function MatchPlanningSection() {
             <span className="font-semibold text-white">Live Console volgt deze matchplanning automatisch</span>
             <span className="mt-1 block text-xs text-zinc-500">
               Wanneer de planning loopt, wisselt de app automatisch naar het segment van het actieve tijdblok.
+              Tijdelijke wedstrijdmomenten keren daarna terug naar het segment dat de planning op dat moment aanwijst.
             </span>
           </span>
         </label>

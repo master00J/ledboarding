@@ -324,6 +324,19 @@ export function SetupContentSection({
 
   return (
     <div className="space-y-10">
+      {(view === "all" || view === "content" || view === "playlists") && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
+            Zo werkt content tijdens een wedstrijd
+          </p>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-400">
+            Maak eerst sponsor- of media-items. Zet die daarna in segment-playlists zoals volledige wedstrijd,
+            rust of goal. In de Live Console kun je een segment starten of één item tijdelijk als cue over alle
+            outputs tonen.
+          </p>
+        </section>
+      )}
+
       {(view === "all" || view === "backup") && (
       <section className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
         <div>
@@ -484,7 +497,10 @@ export function SetupContentSection({
           </div>
         </div>
         {draft.sponsors.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">Nog geen sponsors — voeg er minstens één toe.</p>
+          <p className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-500">
+            Nog geen sponsors. Voeg een tekstitem toe of importeer media; daarna kun je het item in playlists en
+            wedstrijdmomenten gebruiken.
+          </p>
         ) : (
           <ul className="mt-4 space-y-4">
             {draft.sponsors.map((s) => (
@@ -650,7 +666,7 @@ export function SetupContentSection({
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
               Elk segment heeft een eigen playlist. Leeg = fallback naar <strong className="text-zinc-300">Volledige wedstrijd</strong>.
               Het globaal actieve segment kies je op het output-scherm of via de feed; met een <strong className="text-zinc-300">zone-lock</strong> (tab Zones) kan een tweede uitgang een ander segment tonen.
-              Sneltoetsen <strong className="text-zinc-300">1–9</strong> schakelen het globaal segment of — bij een zone-lock — dat van die zone.
+              Sneltoetsen <strong className="text-zinc-300">1–9</strong> schakelen het globaal segment of — bij een zone-lock — dat van die zone. Gebruik de Live Console voor korte cues die vanzelf terugvallen naar dit segment.
             </p>
           </div>
           <button
@@ -822,7 +838,7 @@ function normalizeSponsorPatch(s: Sponsor): Sponsor {
   }
   return {
     ...s,
-    label: s.label.trim() || "Sponsor",
+    label: s.label.slice(0, 180),
     bgColor: /^#[0-9a-fA-F]{6}$/.test(s.bgColor ?? "") ? (s.bgColor as string).toLowerCase() : null,
     textColor: /^#[0-9a-fA-F]{6}$/.test(s.textColor ?? "") ? (s.textColor as string).toLowerCase() : null,
     logoDataUrl,
