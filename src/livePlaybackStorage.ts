@@ -43,6 +43,7 @@ export function saveLivePlayback(state: LivePlaybackState): void {
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent(LIVE_PLAYBACK_EVENT));
     window.dispatchEvent(new CustomEvent("ledboarding-update"));
+    window.ledboarding?.notifyStateChanged();
   });
 }
 

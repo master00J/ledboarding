@@ -62,6 +62,7 @@ export function createLedboardingTestContent(): LedContentState {
     contentKind: "video",
     mediaSrc: `${VISUALS_DIR}\\${visual.fileName}`,
     mediaTitle: visual.fileName,
+    mediaDurationSec: null,
     mediaFit: "cover",
     targetMinutesPerMatch: 0,
   }));

@@ -3,6 +3,7 @@ import type { OpenDialogOptions } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { buildTexturePngBuffer, validateTextureBuildInput } from "./texture-export";
+import { probeVideoDurationSec } from "./video-frame";
 
 const IS_DEV = !app.isPackaged;
 
@@ -43,6 +44,12 @@ function broadcastOutputWindows(): void {
   const payload = Array.from(outputWindows.keys());
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send("ledboarding:output-windows", payload);
+  }
+}
+
+function broadcastStateChanged(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("ledboarding:state-changed");
   }
 }
 
@@ -108,6 +115,7 @@ type ImportedMediaFile = {
   path: string;
   title: string;
   kind: "image" | "video";
+  durationSec?: number | null;
 };
 
 function mediaKindFromPath(filePath: string): ImportedMediaFile["kind"] {
@@ -135,10 +143,12 @@ async function copyMediaToLibrary(filePaths: string[]): Promise<ImportedMediaFil
       if (!stat.isFile()) continue;
       const destination = path.join(mediaDir, safeAssetName(source));
       await fs.promises.copyFile(source, destination);
+      const kind = mediaKindFromPath(source);
       imported.push({
         path: destination,
         title: path.basename(source),
-        kind: mediaKindFromPath(source),
+        kind,
+        durationSec: kind === "video" ? await probeVideoDurationSec(destination) : null,
       });
     } catch (err) {
       console.warn("[ledboarding] media import skipped", source, err);
@@ -225,6 +235,10 @@ ipcMain.handle("ledboarding:close-output", (_event, zoneId: unknown) => {
 ipcMain.handle("ledboarding:list-output-windows", () => Array.from(outputWindows.keys()));
 
 ipcMain.handle("ledboarding:list-displays", () => listDisplays());
+
+ipcMain.on("ledboarding:state-changed", () => {
+  broadcastStateChanged();
+});
 
 ipcMain.handle("ledboarding:select-media-files", async () => {
   const options: OpenDialogOptions = {

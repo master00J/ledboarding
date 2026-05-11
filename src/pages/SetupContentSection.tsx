@@ -14,6 +14,39 @@ function rid(prefix: string): string {
 }
 
 const MAX_LOGO_CHARS = 720_000;
+const DEFAULT_PLAYLIST_DURATION_SEC = 10;
+
+function playlistDurationForSponsor(sponsor: Sponsor): number {
+  return sponsor.contentKind === "video" && sponsor.mediaDurationSec
+    ? sponsor.mediaDurationSec
+    : DEFAULT_PLAYLIST_DURATION_SEC;
+}
+
+function readBrowserVideoDuration(file: File): Promise<number | null> {
+  if (!file.type.startsWith("video/")) return Promise.resolve(null);
+  const url = URL.createObjectURL(file);
+  return readVideoDurationFromUrl(url, () => URL.revokeObjectURL(url));
+}
+
+function readVideoDurationFromUrl(url: string, cleanup?: () => void): Promise<number | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    const finish = (duration: number | null) => {
+      cleanup?.();
+      resolve(duration);
+    };
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      finish(
+        Number.isFinite(video.duration) && video.duration > 0
+          ? Math.min(7200, Math.max(1, Math.ceil(video.duration)))
+          : null,
+      );
+    };
+    video.onerror = () => finish(null);
+    video.src = url;
+  });
+}
 
 export function SetupContentSection({
   view = "all",
@@ -27,6 +60,33 @@ export function SetupContentSection({
   useEffect(() => {
     saveContent(draft);
   }, [draft]);
+
+  useEffect(() => {
+    const missingDurations = draft.sponsors.filter(
+      (s) => s.contentKind === "video" && s.mediaSrc && !s.mediaDurationSec,
+    );
+    if (missingDurations.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const durations = new Map<string, number>();
+      for (const sponsor of missingDurations) {
+        const duration = await readVideoDurationFromUrl(mediaSourceUrl(sponsor.mediaSrc));
+        if (cancelled) return;
+        if (duration) durations.set(sponsor.id, duration);
+      }
+      if (durations.size === 0) return;
+      setDraft((d) => ({
+        ...d,
+        sponsors: d.sponsors.map((s) => {
+          const mediaDurationSec = durations.get(s.id);
+          return mediaDurationSec ? normalizeSponsorPatch({ ...s, mediaDurationSec }) : s;
+        }),
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.sponsors]);
 
   const sortedSegments = useMemo(
     () =>
@@ -63,6 +123,7 @@ export function SetupContentSection({
       contentKind: "text",
       mediaSrc: null,
       mediaTitle: null,
+      mediaDurationSec: null,
       mediaFit: "contain",
       targetMinutesPerMatch: 0,
     };
@@ -91,6 +152,7 @@ export function SetupContentSection({
           contentKind: file.kind,
           mediaSrc: file.path,
           mediaTitle: file.title,
+          mediaDurationSec: file.durationSec ?? null,
           mediaFit: "contain",
           targetMinutesPerMatch: 0,
         } satisfies Sponsor;
@@ -104,7 +166,10 @@ export function SetupContentSection({
                 ...seg,
                 playlist: [
                   ...seg.playlist,
-                  ...nextSponsors.map((sponsor) => ({ sponsorId: sponsor.id, durationSec: 10 })),
+                  ...nextSponsors.map((sponsor) => ({
+                    sponsorId: sponsor.id,
+                    durationSec: playlistDurationForSponsor(sponsor),
+                  })),
                 ],
               }
             : seg,
@@ -174,6 +239,7 @@ export function SetupContentSection({
             contentKind: file.kind,
             mediaSrc: file.path,
             mediaTitle: file.title,
+            mediaDurationSec: file.durationSec ?? null,
             mediaFit: "contain",
             targetMinutesPerMatch: 0,
           } satisfies Sponsor;
@@ -188,6 +254,7 @@ export function SetupContentSection({
                     contentKind: first.kind,
                     mediaSrc: first.path,
                     mediaTitle: first.title,
+                    mediaDurationSec: first.durationSec ?? null,
                   })
                 : s,
             ),
@@ -199,7 +266,10 @@ export function SetupContentSection({
                   ...seg,
                   playlist: [
                     ...seg.playlist,
-                    ...extraSponsors.map((sponsor) => ({ sponsorId: sponsor.id, durationSec: 10 })),
+                    ...extraSponsors.map((sponsor) => ({
+                      sponsorId: sponsor.id,
+                      durationSec: playlistDurationForSponsor(sponsor),
+                    })),
                   ],
                 }
               : seg,
@@ -218,6 +288,7 @@ export function SetupContentSection({
       contentKind: contentKindFromPath(first),
       mediaSrc: first,
       mediaTitle: mediaTitleFromPath(first),
+      mediaDurationSec: null,
     });
   }
 
@@ -225,16 +296,18 @@ export function SetupContentSection({
     setLogoErr(null);
     if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/"))) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const url = typeof reader.result === "string" ? reader.result : "";
       if (url.length > 1_500_000) {
         setLogoErr("Media te groot voor browser-opslag. Gebruik de desktop-app en kies het lokale bestand.");
         return;
       }
+      const mediaDurationSec = await readBrowserVideoDuration(file);
       updateSponsor(sponsorId, {
         contentKind: file.type.startsWith("video/") ? "video" : "image",
         mediaSrc: url,
         mediaTitle: file.name,
+        mediaDurationSec,
       });
     };
     reader.readAsDataURL(file);
@@ -245,6 +318,7 @@ export function SetupContentSection({
       contentKind: "text",
       mediaSrc: null,
       mediaTitle: null,
+      mediaDurationSec: null,
       mediaFit: "contain",
     });
   }
@@ -585,6 +659,7 @@ export function SetupContentSection({
                         onChange={(e) =>
                           updateSponsor(s.id, {
                             contentKind: e.target.value === "video" ? "video" : e.target.value === "image" ? "image" : "text",
+                            mediaDurationSec: e.target.value === "video" ? s.mediaDurationSec : null,
                           })
                         }
                       >
@@ -638,7 +713,11 @@ export function SetupContentSection({
                     </div>
                     <p className="mt-2 truncate text-[11px] text-zinc-500">
                       {s.mediaSrc
-                        ? `${s.contentKind === "video" ? "Video" : "Afbeelding"}: ${s.mediaTitle ?? s.mediaSrc}`
+                        ? `${s.contentKind === "video" ? "Video" : "Afbeelding"}: ${s.mediaTitle ?? s.mediaSrc}${
+                            s.contentKind === "video" && s.mediaDurationSec
+                              ? ` · ${s.mediaDurationSec}s`
+                              : ""
+                          }`
                         : "Geen media gekoppeld; dit item toont tekst/logo."}
                     </p>
                     {s.mediaSrc ? <SponsorMediaPreview sponsor={s} /> : null}
@@ -845,6 +924,10 @@ function normalizeSponsorPatch(s: Sponsor): Sponsor {
     contentKind: s.mediaSrc ? s.contentKind : "text",
     mediaSrc: s.mediaSrc?.trim() || null,
     mediaTitle: s.mediaTitle?.trim() || null,
+    mediaDurationSec:
+      s.contentKind === "video" && s.mediaSrc && typeof s.mediaDurationSec === "number" && Number.isFinite(s.mediaDurationSec)
+        ? Math.min(7200, Math.max(1, Math.round(Number(s.mediaDurationSec))))
+        : null,
     mediaFit: s.mediaFit === "cover" ? "cover" : "contain",
     targetMinutesPerMatch: Math.min(999, Math.max(0, Math.round(Number(s.targetMinutesPerMatch) || 0))),
   };

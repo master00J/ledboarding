@@ -7,6 +7,12 @@ contextBridge.exposeInMainWorld("ledboarding", {
   closeOutput: (zoneId: string) => ipcRenderer.invoke("ledboarding:close-output", zoneId),
   listOutputWindows: () => ipcRenderer.invoke("ledboarding:list-output-windows"),
   listDisplays: () => ipcRenderer.invoke("ledboarding:list-displays"),
+  notifyStateChanged: () => ipcRenderer.send("ledboarding:state-changed"),
+  onStateChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("ledboarding:state-changed", listener);
+    return () => ipcRenderer.removeListener("ledboarding:state-changed", listener);
+  },
   selectMediaFiles: () => ipcRenderer.invoke("ledboarding:select-media-files"),
   importMediaFiles: () => ipcRenderer.invoke("ledboarding:import-media-files"),
   textureSelectSource: () => ipcRenderer.invoke("ledboarding:texture-select-source"),

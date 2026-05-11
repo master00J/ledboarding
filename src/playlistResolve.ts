@@ -44,7 +44,11 @@ export function resolveActivePlaylist(
   for (const row of rows) {
     const sponsor = map.get(row.sponsorId);
     if (!sponsor) continue;
-    out.push({ sponsor, durationSec: row.durationSec });
+    const durationSec =
+      sponsor.contentKind === "video" && sponsor.mediaDurationSec
+        ? sponsor.mediaDurationSec
+        : row.durationSec;
+    out.push({ sponsor, durationSec });
   }
   return out;
 }

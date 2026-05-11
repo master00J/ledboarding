@@ -40,11 +40,18 @@ export function DisplayPage() {
     function onLocal() {
       bumpSync();
     }
+    function onStorage(e: StorageEvent) {
+      if (e.key?.startsWith("ledboarding.")) bumpSync();
+    }
     window.addEventListener("ledboarding-update", onLocal);
     window.addEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+    window.addEventListener("storage", onStorage);
+    const unsubscribeStateChanged = window.ledboarding?.onStateChanged(onLocal);
     return () => {
       window.removeEventListener("ledboarding-update", onLocal);
       window.removeEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+      window.removeEventListener("storage", onStorage);
+      unsubscribeStateChanged?.();
     };
   }, []);
 

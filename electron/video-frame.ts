@@ -73,3 +73,26 @@ export async function extractVideoFirstFrameToPngPath(videoPath: string): Promis
   }
   return tmp;
 }
+
+export async function probeVideoDurationSec(videoPath: string): Promise<number | null> {
+  const bin = ffmpegStatic;
+  if (!bin || !fs.existsSync(bin)) return null;
+  try {
+    await execFileP(
+      bin,
+      ["-hide_banner", "-i", videoPath],
+      { maxBuffer: 4 * 1024 * 1024, windowsHide: true },
+    );
+    return null;
+  } catch (e) {
+    const stderr = e && typeof e === "object" && "stderr" in e ? String((e as { stderr?: unknown }).stderr) : "";
+    const match = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr);
+    if (!match) return null;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3]);
+    const total = hours * 3600 + minutes * 60 + seconds;
+    if (!Number.isFinite(total) || total <= 0) return null;
+    return Math.min(7200, Math.max(1, Math.ceil(total)));
+  }
+}

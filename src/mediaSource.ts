@@ -15,5 +15,5 @@ export function mediaTitleFromPath(path: string): string {
 }
 
 export function contentKindFromPath(path: string): SponsorContentKind {
-  return /\.(mp4|webm|mov|avi)$/i.test(path) ? "video" : "image";
+  return /\.(mp4|webm|mov|avi|mkv|m4v|wmv|mpeg|mpg)$/i.test(path) ? "video" : "image";
 }

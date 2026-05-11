@@ -48,11 +48,13 @@ export function PlayoutConsoleSection() {
     window.addEventListener(LIVE_PLAYBACK_EVENT, onChange);
     window.addEventListener(SPONSOR_BUDGET_LEDGER_EVENT, onChange);
     window.addEventListener("storage", onChange);
+    const unsubscribeStateChanged = window.ledboarding?.onStateChanged(onChange);
     return () => {
       window.removeEventListener("ledboarding-update", onChange);
       window.removeEventListener(LIVE_PLAYBACK_EVENT, onChange);
       window.removeEventListener(SPONSOR_BUDGET_LEDGER_EVENT, onChange);
       window.removeEventListener("storage", onChange);
+      unsubscribeStateChanged?.();
     };
   }, []);
 

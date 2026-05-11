@@ -14,6 +14,14 @@ export function PlaylistRowsEditor({
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
+  function durationForSponsor(sponsor: Sponsor | undefined): number {
+    return sponsor?.contentKind === "video" && sponsor.mediaDurationSec ? sponsor.mediaDurationSec : 10;
+  }
+
+  function sponsorForRow(row: PlaylistEntry): Sponsor | undefined {
+    return sponsors.find((s) => s.id === row.sponsorId);
+  }
+
   function updateRow(idx: number, patch: Partial<PlaylistEntry>) {
     onChange(playlist.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
   }
@@ -44,9 +52,9 @@ export function PlaylistRowsEditor({
   }
 
   function addRow() {
-    const first = sponsors[0]?.id;
+    const first = sponsors[0];
     if (!first) return;
-    onChange([...playlist, { sponsorId: first, durationSec: 10 }]);
+    onChange([...playlist, { sponsorId: first.id, durationSec: durationForSponsor(first) }]);
   }
 
   if (sponsors.length === 0) {
@@ -59,8 +67,13 @@ export function PlaylistRowsEditor({
         <p className="text-sm text-zinc-500">Nog geen rijen in dit segment.</p>
       ) : (
         <ul className="space-y-2">
-          {playlist.map((row, idx) => (
-            <li
+          {playlist.map((row, idx) => {
+            const sponsor = sponsorForRow(row);
+            const videoDurationSec = sponsor?.contentKind === "video" ? sponsor.mediaDurationSec : null;
+            const isVideo = typeof videoDurationSec === "number" && videoDurationSec > 0;
+            const effectiveDurationSec = isVideo ? videoDurationSec : row.durationSec;
+            return (
+              <li
               key={`${row.sponsorId}-${idx}`}
               draggable={!disabled}
               onDragStart={() => setDragIndex(idx)}
@@ -84,7 +97,13 @@ export function PlaylistRowsEditor({
                 disabled={disabled}
                 className="min-w-[160px] flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50"
                 value={row.sponsorId}
-                onChange={(e) => updateRow(idx, { sponsorId: e.target.value })}
+                onChange={(e) => {
+                  const nextSponsor = sponsors.find((s) => s.id === e.target.value);
+                  updateRow(idx, {
+                    sponsorId: e.target.value,
+                    durationSec: durationForSponsor(nextSponsor),
+                  });
+                }}
               >
                 {sponsors.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -96,15 +115,16 @@ export function PlaylistRowsEditor({
                 <span className="text-[10px] text-zinc-500">Sec</span>
                 <input
                   type="number"
-                  disabled={disabled}
+                  disabled={disabled || Boolean(isVideo)}
                   min={2}
-                  max={600}
+                  max={7200}
                   className="w-[4.5rem] rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50"
-                  value={row.durationSec}
+                  value={effectiveDurationSec}
                   onChange={(e) =>
                     updateRow(idx, { durationSec: Number(e.target.value) || 10 })
                   }
                 />
+                {isVideo ? <span className="text-[10px] text-zinc-500">auto video</span> : null}
               </label>
               <div className="ml-auto flex gap-1">
                 <button
@@ -132,8 +152,9 @@ export function PlaylistRowsEditor({
                   ✕
                 </button>
               </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       <button

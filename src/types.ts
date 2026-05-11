@@ -66,6 +66,8 @@ export type Sponsor = {
   mediaSrc: string | null;
   /** Leesbare bestandsnaam voor beheer in het control panel. */
   mediaTitle: string | null;
+  /** Echte videolengte in seconden. Alleen relevant voor video-content. */
+  mediaDurationSec: number | null;
   /** Hoe image/video in het LED-canvas past. */
   mediaFit: MediaFit;
   /** Gewenste schermtijd per wedstrijd in minuten. 0 = geen budgettracking. */
@@ -101,6 +103,7 @@ export type LedContentState = {
 
 export type ResolvedPlaylistEntry = {
   sponsor: Sponsor;
+  /** Effectieve afspeelduur: video's gebruiken hun echte lengte wanneer die bekend is. */
   durationSec: number;
 };
 

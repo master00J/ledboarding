@@ -47,7 +47,11 @@ export function SetupPage() {
       bumpSeg();
     }
     window.addEventListener("ledboarding-update", onContentChange);
-    return () => window.removeEventListener("ledboarding-update", onContentChange);
+    const unsubscribeStateChanged = window.ledboarding?.onStateChanged(onContentChange);
+    return () => {
+      window.removeEventListener("ledboarding-update", onContentChange);
+      unsubscribeStateChanged?.();
+    };
   }, []);
 
   const boardSegments = useMemo(() => loadContent().segments, [segTick]);

@@ -166,6 +166,7 @@ function applyOneAction(action: LedAiAction, content: LedContentState, zones: Le
       contentKind: "text",
       mediaSrc: null,
       mediaTitle: null,
+      mediaDurationSec: null,
       mediaFit: "contain",
       targetMinutesPerMatch: readNumber(p.targetMinutesPerMatch, 0, 999, 0),
     };

@@ -53,6 +53,7 @@ type ImportedMediaFileForWindow = {
   path: string;
   title: string;
   kind: "image" | "video";
+  durationSec?: number | null;
 };
 
 interface LedboardingDesktopApi {
@@ -61,6 +62,8 @@ interface LedboardingDesktopApi {
   closeOutput(zoneId: string): Promise<boolean>;
   listOutputWindows(): Promise<string[]>;
   listDisplays(): Promise<LedDisplayInfoForWindow[]>;
+  notifyStateChanged(): void;
+  onStateChanged(callback: () => void): () => void;
   selectMediaFiles(): Promise<string[]>;
   importMediaFiles(): Promise<ImportedMediaFileForWindow[]>;
   textureSelectSource(): Promise<string | null>;

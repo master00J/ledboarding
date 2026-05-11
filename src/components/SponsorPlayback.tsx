@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { LedZone, ResolvedPlaylistEntry, Sponsor } from "@/types";
 import { loadContent } from "@/contentStorage";
 import {
@@ -23,10 +23,12 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
     window.addEventListener("storage", onStorage);
     window.addEventListener("ledboarding-update", onLocal);
     window.addEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+    const unsubscribeStateChanged = window.ledboarding?.onStateChanged(onLocal);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("ledboarding-update", onLocal);
       window.removeEventListener(LIVE_PLAYBACK_EVENT, onLocal);
+      unsubscribeStateChanged?.();
     };
   }, []);
 
@@ -53,6 +55,7 @@ export function SponsorPlayback({ zone }: { zone: LedZone }) {
         sponsor={activeCue.sponsor}
         fadeTransitionMs={fadeTransitionMs}
         animationKey={activeCue.cue.id}
+        paused={live.status === "paused"}
       />
     );
   }
@@ -80,11 +83,13 @@ function SponsorFullFrame({
   sponsor,
   fadeTransitionMs,
   animationKey,
+  paused,
 }: {
   zone: LedZone;
   sponsor: Sponsor;
   fadeTransitionMs: number;
   animationKey: string;
+  paused: boolean;
 }) {
   const fontSize = Math.max(18, Math.round(zone.heightPx * 0.34));
   const logoMax = Math.round(zone.heightPx * 0.42);
@@ -108,7 +113,7 @@ function SponsorFullFrame({
     return (
       <div key={animationKey} className="relative h-full w-full bg-black" style={animationStyle}>
         <HoldFadeStyle />
-        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop />
+        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop paused={paused} />
       </div>
     );
   }
@@ -179,17 +184,32 @@ function MediaFrame({
   kind,
   objectFit,
   loop,
+  paused = false,
 }: {
   src: string;
   kind: "image" | "video";
   objectFit: "contain" | "cover";
   loop?: boolean;
+  paused?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     setFailed(false);
   }, [src]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (paused) {
+      video.pause();
+      return;
+    }
+    void video.play().catch(() => {
+      /* Autoplay can fail briefly while Chromium initializes the file source. */
+    });
+  }, [paused, src]);
 
   if (failed) {
     return (
@@ -202,6 +222,7 @@ function MediaFrame({
   if (kind === "video") {
     return (
       <video
+        ref={videoRef}
         src={src}
         className="h-full w-full"
         style={{ objectFit }}
@@ -227,7 +248,7 @@ function MediaFrame({
 }
 
 /** Eén slide in de scroll-marquee: volledige zone (breedte × hoogte) per sponsor — beeld/video vullen de lint zoals bij hold. */
-function SponsorScrollSlide({ sponsor, zone }: { sponsor: Sponsor; zone: LedZone }) {
+function SponsorScrollSlide({ sponsor, zone, paused }: { sponsor: Sponsor; zone: LedZone; paused: boolean }) {
   const w = zone.widthPx;
   const h = zone.heightPx;
   const mediaSrc = mediaSourceUrl(sponsor.mediaSrc);
@@ -248,7 +269,7 @@ function SponsorScrollSlide({ sponsor, zone }: { sponsor: Sponsor; zone: LedZone
   if (sponsor.contentKind === "video" && mediaSrc) {
     return (
       <div className="relative shrink-0 overflow-hidden bg-black" style={{ width: w, height: h }}>
-        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop />
+        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop paused={paused} />
       </div>
     );
   }
@@ -300,6 +321,7 @@ function ScrollMarquee({
         key={`${suffix}-${e.sponsor.id}-${i}`}
         sponsor={e.sponsor}
         zone={zone}
+        paused={paused}
       />
     ));
 
@@ -364,7 +386,11 @@ function HoldCarousel({
 
   if (sponsor.contentKind === "image" && mediaSrc) {
     return (
-      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black" style={animationStyle}>
+      <div
+        key={`${sig}-${safeIdx}-${live.itemStartedAtMs}`}
+        className="relative h-full w-full bg-black"
+        style={animationStyle}
+      >
         <HoldFadeStyle />
         <MediaFrame src={mediaSrc} kind="image" objectFit={objectFit} />
       </div>
@@ -373,16 +399,20 @@ function HoldCarousel({
 
   if (sponsor.contentKind === "video" && mediaSrc) {
     return (
-      <div key={`${sig}-${safeIdx}`} className="relative h-full w-full bg-black" style={animationStyle}>
+      <div
+        key={`${sig}-${safeIdx}-${live.itemStartedAtMs}`}
+        className="relative h-full w-full bg-black"
+        style={animationStyle}
+      >
         <HoldFadeStyle />
-        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop />
+        <MediaFrame src={mediaSrc} kind="video" objectFit={objectFit} loop paused={live.status === "paused"} />
       </div>
     );
   }
 
   return (
     <div
-      key={`${sig}-${safeIdx}`}
+      key={`${sig}-${safeIdx}-${live.itemStartedAtMs}`}
       className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center"
       style={{ backgroundColor: bg, color: fg, ...animationStyle }}
     >

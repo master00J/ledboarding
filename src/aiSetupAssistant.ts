@@ -83,6 +83,7 @@ export function buildLedAiSetupSnapshot() {
       contentKind: sponsor.contentKind,
       hasMedia: Boolean(sponsor.mediaSrc),
       mediaTitle: sponsor.mediaTitle,
+      mediaDurationSec: sponsor.mediaDurationSec,
       mediaFit: sponsor.mediaFit,
       bgColor: sponsor.bgColor,
       textColor: sponsor.textColor,

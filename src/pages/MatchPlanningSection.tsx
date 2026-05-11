@@ -260,22 +260,29 @@ function calculateExposure(
 ): { label: string; seconds: number }[] {
   const bySponsor = new Map<string, number>();
   const segmentMap = new Map(segments.map((segment) => [segment.id, segment]));
-  const sponsorMap = new Map(sponsors.map((sponsor) => [sponsor.id, sponsor.label]));
+  const sponsorMap = new Map(sponsors.map((sponsor) => [sponsor.id, sponsor]));
 
   for (const block of blocks) {
     const segment = segmentMap.get(block.segmentId);
     if (!segment) continue;
-    const playlistTotal = segment.playlist.reduce((sum, row) => sum + row.durationSec, 0);
+    const playlistTotal = segment.playlist.reduce((sum, row) => sum + effectiveDurationSec(row.durationSec, sponsorMap.get(row.sponsorId)), 0);
     const blockSeconds = Math.max(0, (block.endMinute - block.startMinute) * 60);
     if (playlistTotal <= 0 || blockSeconds <= 0) continue;
     for (const row of segment.playlist) {
-      bySponsor.set(row.sponsorId, (bySponsor.get(row.sponsorId) ?? 0) + blockSeconds * (row.durationSec / playlistTotal));
+      const rowDurationSec = effectiveDurationSec(row.durationSec, sponsorMap.get(row.sponsorId));
+      bySponsor.set(row.sponsorId, (bySponsor.get(row.sponsorId) ?? 0) + blockSeconds * (rowDurationSec / playlistTotal));
     }
   }
 
   return Array.from(bySponsor.entries())
-    .map(([sponsorId, seconds]) => ({ label: sponsorMap.get(sponsorId) ?? sponsorId, seconds }))
+    .map(([sponsorId, seconds]) => ({ label: sponsorMap.get(sponsorId)?.label ?? sponsorId, seconds }))
     .sort((a, b) => b.seconds - a.seconds);
+}
+
+function effectiveDurationSec(rowDurationSec: number, sponsor: Sponsor | undefined): number {
+  return sponsor?.contentKind === "video" && sponsor.mediaDurationSec
+    ? sponsor.mediaDurationSec
+    : rowDurationSec;
 }
 
 function InfoCard({ label, value }: { label: string; value: string }) {

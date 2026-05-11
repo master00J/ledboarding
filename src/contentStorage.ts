@@ -82,6 +82,7 @@ export function saveContent(state: LedContentState): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent("ledboarding-update"));
+    window.ledboarding?.notifyStateChanged();
   });
 }
 
@@ -234,6 +235,10 @@ function normalizeSponsor(x: unknown): Sponsor | null {
     typeof o.mediaTitle === "string" && o.mediaTitle.trim().length > 0
       ? o.mediaTitle.trim().slice(0, 180)
       : null;
+  const mediaDurationSec =
+    contentKind === "video" && mediaSrc
+      ? clampOptionalNum(o.mediaDurationSec, 1, 7200)
+      : null;
   const mediaFit: MediaFit = o.mediaFit === "cover" ? "cover" : "contain";
   const targetMinutesPerMatch = clampNum(o.targetMinutesPerMatch, 0, 999, 0);
   return {
@@ -245,6 +250,7 @@ function normalizeSponsor(x: unknown): Sponsor | null {
     contentKind: mediaSrc ? contentKind : "text",
     mediaSrc,
     mediaTitle,
+    mediaDurationSec,
     mediaFit,
     targetMinutesPerMatch,
   };
@@ -268,5 +274,11 @@ function normalizeHexOrNull(v: unknown): string | null {
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return fallback;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
+}
+
+function clampOptionalNum(v: unknown, lo: number, hi: number): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return null;
   return Math.min(hi, Math.max(lo, Math.round(n)));
 }

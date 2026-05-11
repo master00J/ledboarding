@@ -27,6 +27,7 @@ export function saveZones(zones: LedZone[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(zones));
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent("ledboarding-update"));
+    window.ledboarding?.notifyStateChanged();
   });
 }
 

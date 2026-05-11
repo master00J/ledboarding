@@ -60,6 +60,7 @@ export function saveSponsorBudgetLedger(ledger: SponsorBudgetLedger): void {
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent(SPONSOR_BUDGET_LEDGER_EVENT));
     window.dispatchEvent(new CustomEvent("ledboarding-update"));
+    window.ledboarding?.notifyStateChanged();
   });
 }
 
